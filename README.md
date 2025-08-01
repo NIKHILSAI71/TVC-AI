@@ -153,24 +153,12 @@ python verify_installation.py
    python scripts/evaluate.py --model_path models/best_model.pth
    ```
 
-5. **Visualize Training Results**:
-   ```bash
-   # Simple visualization (recommended)
-   python scripts/visualize_simple.py --log-dir "./outputs/logs" --output-dir "./visualization_output"
-   
-   # Full detailed visualization  
-   python scripts/visualize.py --log-dir "./outputs/logs" --output-dir "./visualization_output"
-   ```
-
-   **Note**: If you encounter "module 'tensorflow' has no attribute 'compat'" error, use `visualize_simple.py` which fixes this compatibility issue by using modern TensorBoard EventAccumulator instead of deprecated tensorflow.compat.
-
 ### Troubleshooting Installation
 
 **Common Issues**:
 
 - **PyBullet installation fails**: Install Visual C++ redistributables on Windows
 - **CUDA out of memory**: Use CPU training: `python scripts/train.py device=cpu`
-- **"module 'tensorflow' has no attribute 'compat'" error**: Use `scripts/visualize_simple.py` instead of other visualization scripts. This script uses modern TensorBoard EventAccumulator without tensorflow.compat dependencies.
 - **Package conflicts**: Use a virtual environment:
   ```bash
   python -m venv tvc_env
