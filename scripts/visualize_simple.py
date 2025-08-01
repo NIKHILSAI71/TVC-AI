@@ -104,10 +104,10 @@ def create_simple_plots(metrics: Dict[str, List[Tuple[int, float]]], output_dir:
     # Handle single subplot case
     if num_plots == 1:
         axes = [axes]
-    elif rows == 1:
-        axes = axes if isinstance(axes, list) else [axes]
+    elif rows == 1 and cols > 1:
+        axes = list(axes) if hasattr(axes, '__iter__') else [axes]
     else:
-        axes = axes.flatten()
+        axes = axes.flatten() if hasattr(axes, 'flatten') else [axes]
     
     # Plot each metric
     for i, metric_key in enumerate(available_metrics[:num_plots]):
