@@ -1,0 +1,30 @@
+# =============================================================================
+# Training Configuration - Minimal
+# Quick training for testing and development
+# =============================================================================
+
+# Short training for quick testing
+total_steps: 100000  # Reduced training steps
+eval_freq: 10000  # More frequent evaluation
+eval_episodes: 5  # Fewer episodes per evaluation
+final_eval_episodes: 10  # Fewer final evaluation episodes
+
+# Frequent checkpointing for debugging
+checkpoint_freq: 20000  # More frequent checkpoints
+save_best_model: true
+save_last_model: true
+
+# No early stopping for complete training observation
+early_stopping:
+  enabled: false
+  patience: 5
+  min_improvement: 0.02
+  metric: "eval_reward_mean"
+
+# Single environment for simplicity
+env_parallel: false
+num_envs: 1
+
+# No curriculum learning for simplicity
+curriculum:
+  enabled: false

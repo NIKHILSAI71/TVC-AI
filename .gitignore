@@ -3,3 +3,5 @@ outputs
 evaluation_results
 visualization_output
 benchmark_results.json
+*.pyc
+__pycache__

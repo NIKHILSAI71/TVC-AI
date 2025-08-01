@@ -1,0 +1,34 @@
+# =============================================================================
+# Logging Configuration - Debug
+# Detailed logging for development and debugging
+# =============================================================================
+
+# Frequent console logging for debugging
+console_log_interval: 500  # More frequent console logs
+log_level: "DEBUG"  # Detailed logging
+
+# Enhanced TensorBoard logging
+tensorboard:
+  enabled: true
+  log_dir: "./logs"
+  log_scalars: true
+  log_histograms: true  # Enable for debugging
+  log_images: false
+
+# W&B disabled for local debugging
+wandb:
+  enabled: false
+  project: "tvc-ai-debug"
+  entity: null
+  tags: ["debug", "sac", "rocket"]
+  notes: "Debug training session"
+
+# Frequent model saving for debugging
+model_save_interval: 10000  # Very frequent saves
+save_replay_buffer: false
+
+# Video recording enabled for debugging
+video_recording:
+  enabled: true
+  record_freq: 20000  # Frequent recording
+  video_length: 100  # Shorter videos

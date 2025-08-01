@@ -1,0 +1,62 @@
+# =============================================================================
+# SAC Agent Configuration - Minimal
+# Lightweight configuration for quick testing
+# =============================================================================
+
+# Simplified network architecture
+architecture:
+  hidden_dims: [256, 256]  # Smaller network for faster training
+  activation: "relu"
+  layer_norm: false
+  dropout: 0.0
+  
+  actor:
+    final_activation: "tanh"
+    log_std_bounds: [-20, 2]
+    mean_range: 1.0
+  
+  critic:
+    num_critics: 2
+    use_spectral_norm: false
+
+# Higher learning rates for faster convergence
+optimization:
+  lr_actor: 3e-4  # Higher learning rate
+  lr_critic: 3e-4  # Higher learning rate
+  lr_alpha: 3e-4
+  optimizer: "adam"
+  weight_decay: 0.0  # No regularization for speed
+  grad_clip_norm: 5.0  # Lower clipping for faster updates
+  
+  lr_schedule:
+    enabled: false
+
+# SAC parameters optimized for quick training
+sac:
+  gamma: 0.99  # Lower discount for shorter-term focus
+  tau: 0.02  # Faster target updates
+  alpha: 0.2  # Higher entropy for more exploration
+  automatic_entropy_tuning: true
+  target_entropy: -2.0
+  
+  # Smaller buffer for faster learning
+  buffer_size: 100000  # Much smaller buffer
+  batch_size: 256  # Smaller batch size
+  learning_starts: 1000  # Start learning earlier
+  
+  # More frequent updates
+  train_freq: 1  # Train every step
+  gradient_steps: 1  # Single gradient step
+  target_update_freq: 1
+  
+  policy_delay: 1
+  target_policy_noise: 0.1
+  target_noise_clip: 0.3
+
+# No exploration noise for simplicity
+exploration:
+  action_noise_type: "none"
+  action_noise_std: 0.0
+  
+  exploration_schedule:
+    enabled: false

@@ -1,0 +1,34 @@
+# =============================================================================
+# Logging Configuration - Standard
+# Default logging setup for most use cases
+# =============================================================================
+
+# Console logging
+console_log_interval: 1000  # Console log frequency
+log_level: "INFO"  # DEBUG, INFO, WARNING, ERROR
+
+# TensorBoard logging
+tensorboard:
+  enabled: true
+  log_dir: "./logs"
+  log_scalars: true
+  log_histograms: false  # Disabled for performance
+  log_images: false
+
+# Weights & Biases logging
+wandb:
+  enabled: false  # Disabled by default
+  project: "tvc-ai"
+  entity: null  # Your W&B username/team
+  tags: ["sac", "rocket", "tvc"]
+  notes: "SAC training for rocket TVC control"
+
+# Model saving
+model_save_interval: 50000  # Model save frequency
+save_replay_buffer: false  # Save replay buffer checkpoints
+
+# Video recording
+video_recording:
+  enabled: false  # Disabled by default
+  record_freq: 100000  # Record every N steps
+  video_length: 200  # Maximum video length in steps

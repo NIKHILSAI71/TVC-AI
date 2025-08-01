@@ -1,0 +1,81 @@
+# =============================================================================
+# SAC Agent Configuration - Default
+# Standard Soft Actor-Critic configuration
+# =============================================================================
+
+# Network architecture
+architecture:
+  # Shared network layers
+  hidden_dims: [512, 512, 256]  # Hidden layer dimensions
+  activation: "relu"  # relu, tanh, elu, swish
+  layer_norm: false  # Use layer normalization
+  dropout: 0.0  # Dropout probability
+  
+  # Actor-specific settings
+  actor:
+    final_activation: "tanh"  # Final activation for actions
+    log_std_bounds: [-20, 2]  # Bounds for log standard deviation
+    mean_range: 1.0  # Range for action means
+  
+  # Critic-specific settings
+  critic:
+    num_critics: 2  # Number of critic networks (for SAC)
+    use_spectral_norm: false  # Use spectral normalization
+
+# Learning rates and optimization
+optimization:
+  # Learning rates
+  lr_actor: 1e-4  # Actor learning rate
+  lr_critic: 3e-4  # Critic learning rate
+  lr_alpha: 3e-4  # Temperature parameter learning rate
+  
+  # Optimizer settings
+  optimizer: "adam"  # adam, adamw, rmsprop
+  weight_decay: 1e-5  # L2 regularization
+  grad_clip_norm: 10.0  # Gradient clipping norm
+  
+  # Learning rate scheduling
+  lr_schedule:
+    enabled: false
+    type: "cosine"  # linear, cosine, exponential
+    warmup_steps: 10000
+    decay_steps: 1000000
+
+# SAC-specific hyperparameters
+sac:
+  # Core SAC parameters
+  gamma: 0.995  # Discount factor
+  tau: 0.01  # Soft update coefficient
+  alpha: 0.1  # Initial temperature parameter
+  automatic_entropy_tuning: true  # Automatic entropy coefficient tuning
+  target_entropy: -2.0  # Target entropy (if not automatic)
+  
+  # Experience replay
+  buffer_size: 2000000  # Replay buffer size
+  batch_size: 512  # Training batch size
+  learning_starts: 5000  # Steps before learning starts
+  
+  # Training frequency
+  train_freq: 4  # Training frequency (in environment steps)
+  gradient_steps: 4  # Gradient steps per training call
+  
+  # Target network updates
+  target_update_freq: 1  # Target network update frequency
+  
+  # Advanced SAC settings
+  policy_delay: 1  # Policy update delay
+  target_policy_noise: 0.2  # Target policy noise
+  target_noise_clip: 0.5  # Target noise clipping
+
+# Exploration and noise
+exploration:
+  # Action noise during training
+  action_noise_type: "none"  # none, gaussian, ou
+  action_noise_std: 0.1  # Standard deviation of action noise
+  
+  # Exploration schedule
+  exploration_schedule:
+    enabled: false
+    initial_noise: 0.5
+    final_noise: 0.1
+    decay_steps: 500000

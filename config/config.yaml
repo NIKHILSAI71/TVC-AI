@@ -1,0 +1,36 @@
+# =============================================================================
+# TVC-AI Main Configuration
+# Entry point configuration that imports modular components
+# =============================================================================
+
+defaults:
+  - env: default
+  - agent: sac_default
+  - training: standard
+  - logging: standard
+  - deployment: standard
+  - _self_
+
+# =============================================================================
+# GLOBAL SETTINGS
+# =============================================================================
+globals:
+  project_name: "TVC-AI"
+  experiment_name: "rocket_tvc_sac_v2"
+  output_dir: "./outputs/${now:%Y-%m-%d}/${now:%H-%M-%S}"
+  seed: 42
+  debug: false
+  device: "auto"  # auto, cpu, cuda
+  num_workers: 4  # For parallel environment sampling
+
+# =============================================================================
+# HYDRA CONFIGURATION
+# =============================================================================
+hydra:
+  run:
+    dir: ${globals.output_dir}
+  job:
+    name: tvc_ai_training
+  
+# Override any parameters from command line or other configs
+# Example usage: python scripts/train.py env.rocket.mass=2.0 training.total_steps=1000000
