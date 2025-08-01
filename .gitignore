@@ -5,3 +5,8 @@ visualization_output
 benchmark_results.json
 *.pyc
 __pycache__
+.devcontainer
+*.log
+*.pkl
+*.json
+*.csv
