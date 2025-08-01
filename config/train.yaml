@@ -1,6 +1,6 @@
 # =============================================================================
-# TVC-AI Main Configuration
-# Entry point configuration that imports modular components
+# TVC-AI Training Configuration
+# Main training entry point configuration
 # =============================================================================
 
 defaults:
@@ -8,7 +8,6 @@ defaults:
   - agent: sac_default
   - training: standard
   - logging: standard
-  - deployment: standard
   - _self_
 
 # =============================================================================
@@ -22,6 +21,17 @@ globals:
   debug: false
   device: "auto"  # auto, cpu, cuda
   num_workers: 4  # For parallel environment sampling
+
+# =============================================================================
+# WEIGHTS & BIASES CONFIGURATION
+# =============================================================================
+wandb:
+  enabled: false
+  project: "tvc-ai"
+  entity: null
+  tags: ["sac", "rocket", "tvc"]
+  notes: "Rocket TVC control with SAC"
+  mode: "online"  # online, offline, disabled
 
 # =============================================================================
 # HYDRA CONFIGURATION

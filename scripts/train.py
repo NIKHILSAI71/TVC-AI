@@ -197,7 +197,7 @@ def train_agent(cfg: DictConfig) -> None:
     """
     # Setup logging
     logging.basicConfig(
-        level=getattr(logging, cfg.logging.level.upper()),
+        level=getattr(logging, cfg.logging.log_level.upper()),
         format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
     )
     logger = logging.getLogger(__name__)
@@ -207,14 +207,14 @@ def train_agent(cfg: DictConfig) -> None:
     logger.info(OmegaConf.to_yaml(cfg))
     
     # Set random seeds for reproducibility
-    if cfg.seed is not None:
-        np.random.seed(cfg.seed)
-        torch.manual_seed(cfg.seed)
+    if cfg.globals.seed is not None:
+        np.random.seed(cfg.globals.seed)
+        torch.manual_seed(cfg.globals.seed)
         if torch.cuda.is_available():
-            torch.cuda.manual_seed(cfg.seed)
+            torch.cuda.manual_seed(cfg.globals.seed)
     
     # Create output directories
-    output_dir = Path(cfg.output_dir)
+    output_dir = Path(cfg.globals.output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
     
     model_dir = output_dir / "models"
@@ -326,7 +326,7 @@ def train_agent(cfg: DictConfig) -> None:
         domain_randomization=cfg.env.domain_randomization,
         sensor_noise=cfg.env.sensor_noise,
         render_mode=cfg.env.get('render_mode'),
-        debug=cfg.debug
+        debug=cfg.globals.debug
     )
     
     # Evaluation environment (no randomization for consistent evaluation)
@@ -336,7 +336,7 @@ def train_agent(cfg: DictConfig) -> None:
         domain_randomization=False,  # No randomization for evaluation
         sensor_noise=False,  # No noise for evaluation
         render_mode=None,  # No rendering during evaluation
-        debug=cfg.debug
+        debug=cfg.globals.debug
     )
     
     # Get environment dimensions
@@ -368,12 +368,13 @@ def train_agent(cfg: DictConfig) -> None:
     logger.info("SAC agent created successfully")
     
     # Load checkpoint if specified
-    if cfg.checkpoint_path:
+    if hasattr(cfg, 'checkpoint_path') and cfg.checkpoint_path:
         logger.info(f"Loading checkpoint from {cfg.checkpoint_path}")
         agent.load(cfg.checkpoint_path)
     
     # Training metrics
-    metrics = TrainingMetrics(window_size=cfg.logging.metrics_window)
+    metrics_window = getattr(cfg.logging, 'metrics_window', 100)
+    metrics = TrainingMetrics(window_size=metrics_window)
     
     # Training loop
     logger.info("Starting training...")
@@ -447,7 +448,7 @@ def train_agent(cfg: DictConfig) -> None:
             episode_length = 0
             
             # Log progress
-            if episode_count % cfg.logging.log_interval == 0:
+            if episode_count % cfg.logging.console_log_interval == 0:
                 summary = metrics.get_summary()
                 logger.info(f"Episode {episode_count}, Step {step}")
                 logger.info(f"Reward: {summary.get('episode_reward_mean', 0):.2f} ± {summary.get('episode_reward_std', 0):.2f}")
@@ -460,7 +461,7 @@ def train_agent(cfg: DictConfig) -> None:
             eval_metrics = evaluate_agent(
                 agent, eval_env, 
                 num_episodes=cfg.training.eval_episodes,
-                render=cfg.debug
+                render=cfg.globals.debug
             )
             
             # Log evaluation metrics
