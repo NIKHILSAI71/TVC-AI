@@ -1,11 +1,17 @@
-# Deep Reinforcement Learning for Model Rocket TVC Control
+# TVC-AI: Deep Reinforcement Learning for Rocket Thrust Vector Control
 
-> An AI-powered flight controller that learns to stabilize a model rocket in a realistic physics simulation, designed for deployment on real-world microcontrollers.
+![TVC-AI Banner](https://img.shields.io/badge/TVC--AI-Rocket%20Control-blue?style=for-the-badge&logo=rocket)
 
-<!-- Placeholder for a cool GIF of the rocket stabilizing -->
-<!-- ![Rocket Simulation GIF](assets/simulation_demo.gif) -->
+A comprehensive Deep Reinforcement Learning system for controlling model rocket attitude using Thrust Vector Control (TVC). This project implements a Soft Actor-Critic (SAC) agent trained in a realistic PyBullet physics simulation with domain randomization for robust sim-to-real transfer.
 
-This project implements a Deep Reinforcement Learning (DRL) agent to control a model rocket's attitude using Thrust Vector Control (TVC) for stable vertical ascent. The agent learns a robust control policy through interaction with a high-fidelity, domain-randomized physics simulation (digital twin).
+## 🚀 Features
+
+- **SAC Algorithm**: State-of-the-art continuous control with automatic entropy tuning
+- **Realistic Physics**: 6-DOF rocket dynamics simulation using PyBullet
+- **Domain Randomization**: Robust training with mass, thrust, and noise variations
+- **Microcontroller Deployment**: TensorFlow Lite quantization for embedded systems
+- **Comprehensive Training**: Full pipeline with monitoring, evaluation, and export tools
+- **Real-time Capable**: Sub-millisecond inference for real-time control
 
 ## Table of Contents
 
@@ -67,13 +73,98 @@ tvc-ai/
 ├── agent/              # DRL agent implementation (SAC algorithm, networks)
 ├── env/                # Rocket physics simulation (Gymnasium environment)
 ├── models/             # Saved model checkpoints and exported TFLM models
-├── notebooks/          # Jupyter notebooks for analysis and visualization
 ├── scripts/            # High-level scripts for training, evaluation, etc.
 │   ├── train.py
 │   ├── evaluate.py
 │   └── export_tflm.py
+├── config/             # Configuration files (Hydra-based)
+├── tests/              # Test suite and benchmarks
+├── utils/              # Utility functions and helpers
+├── verify_installation.py
+├── setup.py           # Automated setup script
+├── requirements.txt   # Full dependencies
+├── requirements-minimal.txt  # Core dependencies only
+├── requirements-dev.txt      # Development dependencies
 ├── .gitignore
-├── README.md
-└── requirements.txt
+└── README.md
 ```
+
+## 🚀 Getting Started
+
+### Prerequisites
+
+- **Python 3.8-3.11** (3.10.11 recommended)
+- **8GB+ RAM** (16GB recommended for training)
+- **CUDA-capable GPU** (optional but recommended for faster training)
+- **~2-5GB disk space** (depending on installation type)
+
+### Quick Installation
+
+**Option 1: Automated Setup (Recommended)**
+```bash
+# Clone the repository
+git clone <repository-url>
+cd TVC-AI
+
+# Run automated setup
+python setup.py
+```
+
+**Option 2: Manual Installation**
+```bash
+# Clone the repository
+git clone <repository-url>
+cd TVC-AI
+
+# Choose your installation type:
+
+# Minimal (core functionality only - ~2GB)
+pip install -r requirements-minimal.txt
+
+# Full (all features - ~4GB, recommended)
+pip install -r requirements.txt
+
+# Development (includes testing tools - ~5GB)
+pip install -r requirements.txt -r requirements-dev.txt
+
+# Verify installation
+python verify_installation.py
+```
+
+### First Steps
+
+1. **Verify Installation**:
+   ```bash
+   python verify_installation.py
+   ```
+
+2. **Train Your First Model**:
+   ```bash
+   python scripts/train.py
+   ```
+
+3. **Monitor Training**:
+   ```bash
+   tensorboard --logdir logs/
+   ```
+
+4. **Evaluate Trained Model**:
+   ```bash
+   python scripts/evaluate.py --model_path models/best_model.pth
+   ```
+
+### Troubleshooting Installation
+
+**Common Issues**:
+
+- **PyBullet installation fails**: Install Visual C++ redistributables on Windows
+- **CUDA out of memory**: Use CPU training: `python scripts/train.py device=cpu`
+- **Package conflicts**: Use a virtual environment:
+  ```bash
+  python -m venv tvc_env
+  source tvc_env/bin/activate  # On Windows: tvc_env\Scripts\activate
+  pip install -r requirements.txt
+  ```
+
+For detailed usage instructions, see [USAGE.md](USAGE.md).
 

@@ -1,0 +1,50 @@
+# Core Deep Learning and RL
+torch>=1.13.0,<2.1.0
+torchvision>=0.14.0,<0.16.0
+numpy>=1.21.0,<1.25.0
+scipy>=1.9.0,<1.12.0
+
+# Physics Simulation
+pybullet>=3.2.7,<3.3.0
+# rocketpy>=1.0.0  # Optional - uncomment if needed
+
+# Reinforcement Learning Environment
+gymnasium>=0.26.0,<0.30.0
+# stable-baselines3>=1.8.0,<2.2.0  # Optional - reference implementation
+
+# Data Processing and Visualization
+pandas>=1.5.0,<2.1.0
+matplotlib>=3.6.0,<3.8.0
+seaborn>=0.11.0,<0.13.0
+plotly>=5.10.0,<5.16.0
+
+# ML Utilities
+scikit-learn>=1.1.0,<1.4.0
+tensorboard>=2.15.0,<2.17.0
+wandb>=0.13.0,<0.16.0
+
+# Model Deployment
+tensorflow>=2.15.0,<2.17.0
+# tensorflow-lite>=2.15.0  # Included with tensorflow
+onnx>=1.12.0,<1.15.0
+onnxruntime>=1.12.0,<1.16.0
+
+# Utilities
+tqdm>=4.64.0,<4.67.0
+pyyaml>=6.0,<6.1.0
+hydra-core>=1.2.0,<1.4.0
+coloredlogs>=15.0,<15.1.0
+
+# Development Tools
+pytest>=7.1.0,<7.5.0
+black>=22.0.0,<24.0.0
+flake8>=5.0.0,<7.0.0
+mypy>=0.991,<1.6.0
+
+# Microcontroller Development (Optional)
+# platformio>=6.0.0,<6.2.0  # Uncomment if needed
+pyserial>=3.4,<3.6
+
+# Additional Physics and Math
+sympy>=1.10,<1.13
+# control>=0.9.0,<1.0.0  # Uncomment if needed for control theory
