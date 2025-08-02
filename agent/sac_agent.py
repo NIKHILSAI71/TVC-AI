@@ -1043,7 +1043,7 @@ class SACAgent:
         
         return agent
     
-    def eval(self):
+    def eval_mode(self):
         """Set agent to evaluation mode."""
         self.actor.eval()
         self.critic1.eval()
@@ -1052,7 +1052,7 @@ class SACAgent:
         self.target_critic2.eval()
         return self
     
-    def train(self):
+    def train_mode(self):
         """Set agent to training mode."""
         self.actor.train()
         self.critic1.train()
