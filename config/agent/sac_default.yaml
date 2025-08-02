@@ -1,81 +1,83 @@
 # =============================================================================
-# SAC Agent Configuration - Default
-# Standard Soft Actor-Critic configuration
+# SAC Agent Configuration - Improved for Robotics
+# Based on latest research for continuous control tasks
 # =============================================================================
 
-# Network architecture
+# Network architecture - Research-proven settings
 architecture:
-  # Shared network layers
-  hidden_dims: [512, 512, 256]  # Hidden layer dimensions
-  activation: "relu"  # relu, tanh, elu, swish
-  layer_norm: false  # Use layer normalization
-  dropout: 0.0  # Dropout probability
+  # Smaller, more stable network with layer normalization
+  hidden_dims: [256, 256]  # Reduced from [512, 512, 256]
+  activation: "elu"  # ELU activation works better than ReLU
+  layer_norm: true  # CRITICAL: Prevents divergence
+  dropout: 0.1  # Small dropout for regularization
   
   # Actor-specific settings
   actor:
-    final_activation: "tanh"  # Final activation for actions
-    log_std_bounds: [-20, 2]  # Bounds for log standard deviation
-    mean_range: 1.0  # Range for action means
+    final_activation: "tanh"
+    log_std_bounds: [-10, 2]  # Tighter bounds for stability
+    mean_range: 1.0
   
   # Critic-specific settings
   critic:
-    num_critics: 2  # Number of critic networks (for SAC)
-    use_spectral_norm: false  # Use spectral normalization
+    num_critics: 2
+    use_spectral_norm: false
 
-# Learning rates and optimization
+# Learning rates and optimization - Conservative approach
 optimization:
-  # Learning rates
-  lr_actor: 1e-4  # Actor learning rate
-  lr_critic: 3e-4  # Critic learning rate
-  lr_alpha: 3e-4  # Temperature parameter learning rate
+  # More conservative learning rates
+  lr_actor: 0.0003  # Reduced from 1e-4
+  lr_critic: 0.001  # Increased critic learning rate
+  lr_alpha: 0.0003  # Matched to actor
   
   # Optimizer settings
-  optimizer: "adam"  # adam, adamw, rmsprop
-  weight_decay: 1e-5  # L2 regularization
-  grad_clip_norm: 10.0  # Gradient clipping norm
+  optimizer: "adamw"  # AdamW with weight decay
+  weight_decay: 1e-4  # Regularization
+  grad_clip_norm: 1.0  # Stricter gradient clipping
   
   # Learning rate scheduling
   lr_schedule:
     enabled: false
-    type: "cosine"  # linear, cosine, exponential
-    warmup_steps: 10000
-    decay_steps: 1000000
 
-# SAC-specific hyperparameters
+# SAC-specific hyperparameters - Tuned for robotics
 sac:
   # Core SAC parameters
-  gamma: 0.995  # Discount factor
-  tau: 0.01  # Soft update coefficient
-  alpha: 0.1  # Initial temperature parameter
-  automatic_entropy_tuning: true  # Automatic entropy coefficient tuning
-  target_entropy: -2.0  # Target entropy (if not automatic)
+  gamma: 0.98  # Lower discount factor for shorter-term focus
+  tau: 0.005  # Conservative target network updates
+  alpha: 0.2  # Higher entropy for more exploration
+  automatic_entropy_tuning: true
+  target_entropy: -2.0  # Appropriate for 2D action space
   
-  # Experience replay
-  buffer_size: 2000000  # Replay buffer size
-  batch_size: 512  # Training batch size
-  learning_starts: 5000  # Steps before learning starts
+  # Experience replay - Optimized for simulation
+  buffer_size: 1000000  # Smaller buffer for faster learning
+  batch_size: 256  # Smaller batches initially
+  learning_starts: 2000  # Reduced from 5000
   
-  # Training frequency
-  train_freq: 4  # Training frequency (in environment steps)
-  gradient_steps: 4  # Gradient steps per training call
+  # Training frequency - Research-backed ratios
+  train_freq: 10  # Higher frequency to enable gSDE
+  gradient_steps: 32  # Multiple gradient steps per update
   
   # Target network updates
-  target_update_freq: 1  # Target network update frequency
+  target_update_freq: 1
   
   # Advanced SAC settings
-  policy_delay: 1  # Policy update delay
-  target_policy_noise: 0.2  # Target policy noise
-  target_noise_clip: 0.5  # Target noise clipping
+  policy_delay: 4  # Delay policy updates for stability
+  target_policy_noise: 0.1  # Lower noise
+  target_noise_clip: 0.2  # Tighter clipping
 
-# Exploration and noise
+# Exploration and noise - gSDE for consistent exploration
 exploration:
-  # Action noise during training
-  action_noise_type: "none"  # none, gaussian, ou
-  action_noise_std: 0.1  # Standard deviation of action noise
+  # gSDE (Generalized State Dependent Exploration)
+  use_sde: true  # CRITICAL: Enables consistent exploration
+  action_noise_type: "gsde"  # Consistent noise over multiple steps
+  action_noise_std: 0.1
+  sde_sample_freq: 10  # Resample noise every 10 steps
+  
+  # N-step returns for better learning
+  n_steps: 3  # Use 3-step returns
   
   # Exploration schedule
   exploration_schedule:
-    enabled: false
-    initial_noise: 0.5
-    final_noise: 0.1
-    decay_steps: 500000
+    enabled: true
+    initial_noise: 0.3
+    final_noise: 0.05
+    decay_steps: 200000
