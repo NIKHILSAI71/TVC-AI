@@ -38,13 +38,14 @@ import math
 import random
 from dataclasses import dataclass
 
-# Try to import RocketPy, fall back gracefully if not available
+# Import RocketPy for high-fidelity aerodynamics (optional)
 try:
     from rocketpy import Rocket, Environment as RocketPyEnv, SolidMotor
     ROCKETPY_AVAILABLE = True
+    logging.info("✅ RocketPy available - high-fidelity aerodynamics enabled")
 except ImportError:
     ROCKETPY_AVAILABLE = False
-    logging.warning("RocketPy not available. Using simplified aerodynamics.")
+    logging.info("ℹ️ RocketPy not available - using simplified aerodynamics model")
 
 
 @dataclass
