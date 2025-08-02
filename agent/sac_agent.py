@@ -46,54 +46,64 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 @dataclass
 class SACConfig:
-    """Configuration parameters for SAC algorithm."""
-    # Network architecture
-    hidden_dims: List[int] = None  # Will default to [256, 256]
+    """Configuration parameters for SAC algorithm optimized for rocket control stability."""
+    # Network architecture - optimized for rocket control
+    hidden_dims: List[int] = None  # Will default to [512, 512, 256] for better representation
     activation: str = "relu"  # "relu", "tanh", "elu", "swish"
-    layer_norm: bool = False  # Use layer normalization
-    dropout: float = 0.0  # Dropout probability
+    layer_norm: bool = True  # Use layer normalization for stability
+    dropout: float = 0.1  # Light dropout for regularization
     
-    # Learning parameters
-    lr_actor: float = 3e-4
-    lr_critic: float = 3e-4
-    lr_alpha: float = 3e-4
+    # Learning parameters - tuned for stability
+    lr_actor: float = 1e-4  # Lower actor learning rate for stable policy updates
+    lr_critic: float = 3e-4  # Standard critic learning rate
+    lr_alpha: float = 1e-4  # Lower alpha learning rate for stable entropy tuning
     
-    # SAC hyperparameters
-    gamma: float = 0.99  # Discount factor
-    tau: float = 0.005   # Soft update coefficient
-    alpha: float = 0.2   # Initial entropy coefficient
-    automatic_entropy_tuning: bool = True
-    target_entropy: float = None  # Will be set to -action_dim if None
+    # SAC hyperparameters - optimized for rocket control
+    gamma: float = 0.995  # Higher discount factor for long-term stability
+    tau: float = 0.001   # Slower soft update for target network stability
+    alpha: float = 0.1   # Lower initial entropy coefficient for less exploration
+    automatic_entropy_tuning: bool = True  # Enable adaptive entropy tuning
+    target_entropy: float = None  # Will be set to -action_dim for rocket control
     
-    # Training parameters
-    batch_size: int = 256
+    # Training parameters - enhanced for stability
+    batch_size: int = 512  # Larger batch size for more stable gradients
     buffer_size: int = 1000000
-    learning_starts: int = 1000  # Steps before training begins
+    learning_starts: int = 2000  # More initial exploration before training
     train_freq: int = 1  # Training frequency
     gradient_steps: int = 1  # Gradient steps per training step
     
-    # Exploration and stability improvements
-    action_noise: float = 0.1
-    exploration_noise_decay: float = 0.995  # Decay rate for exploration noise
+    # Stability improvements for rocket control
+    action_noise: float = 0.05  # Lower action noise for stable control
+    exploration_noise_decay: float = 0.998  # Slower decay for consistent exploration
     min_exploration_noise: float = 0.01  # Minimum exploration noise
-    gradient_clip_norm: float = 10.0  # Gradient clipping norm
+    gradient_clip_norm: float = 1.0  # Stricter gradient clipping for stability
     
-    # Curriculum learning parameters
+    # Enhanced curriculum learning for rocket control
     curriculum_learning: bool = True
-    curriculum_stages: int = 4  # Number of curriculum stages
-    curriculum_steps_per_stage: int = 50000  # Steps per curriculum stage
+    curriculum_stages: int = 5  # More stages for gradual difficulty increase
+    curriculum_steps_per_stage: int = 100000  # Longer stages for better learning
+    
+    # Reward shaping for rocket stability
+    reward_scale: float = 1.0  # Reward scaling factor
+    stability_bonus: float = 0.1  # Bonus for maintaining stable attitude
+    fuel_efficiency_weight: float = 0.05  # Weight for fuel efficiency
     
     # Performance monitoring
     eval_freq: int = 5000  # Evaluation frequency during training
     save_freq: int = 10000  # Model saving frequency
-    early_stopping_patience: int = 10  # Early stopping patience (in eval cycles)
-    target_success_rate: float = 0.8  # Target success rate for curriculum progression
+    early_stopping_patience: int = 15  # Increased patience for stability
+    target_success_rate: float = 0.85  # Higher target success rate
+    
+    # Advanced stability features
+    use_layer_norm: bool = True  # Use layer normalization in networks
+    use_spectral_norm: bool = False  # Spectral normalization for Lipschitz constraint
+    polyak_update: bool = True  # Use Polyak averaging for target networks
     
     def __post_init__(self):
         if self.hidden_dims is None:
-            self.hidden_dims = [256, 256]  # Default to minimal for faster training
+            self.hidden_dims = [512, 512, 256]  # Larger network for better rocket control
         if self.target_entropy is None:
-            self.target_entropy = -2.0  # Will be set properly in agent initialization
+            self.target_entropy = -2.0  # Appropriate for 2D rocket control action space
 
 
 class ReplayBuffer:
@@ -1032,6 +1042,24 @@ class SACAgent:
         agent.load(filepath, strict=False)
         
         return agent
+    
+    def eval(self):
+        """Set agent to evaluation mode."""
+        self.actor.eval()
+        self.critic1.eval()
+        self.critic2.eval()
+        self.target_critic1.eval()
+        self.target_critic2.eval()
+        return self
+    
+    def train(self):
+        """Set agent to training mode."""
+        self.actor.train()
+        self.critic1.train()
+        self.critic2.train()
+        self.target_critic1.train()
+        self.target_critic2.train()
+        return self
 
 
 if __name__ == "__main__":
