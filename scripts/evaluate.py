@@ -223,7 +223,7 @@ def load_trained_agent(model_path: str) -> SACAgent:
             logger.info("✅ Loaded agent from direct state dict")
         
         # Set agent to evaluation mode
-        agent.eval()
+        agent.eval_mode()
         logger.info("🎯 Model loaded successfully and set to evaluation mode")
         return agent
         
