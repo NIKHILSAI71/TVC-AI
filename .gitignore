@@ -1,5 +1,6 @@
 .github
 outputs
+curriculum_output
 evaluation_results
 visualization_output
 benchmark_results.json
