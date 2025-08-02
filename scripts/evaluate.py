@@ -491,17 +491,24 @@ def main():
     # Load agent
     logger.info(f"Loading model from {args.model_path}")
     
-    # Create dummy environment to get dimensions
-    temp_env = make_evaluation_env()
-    obs_dim = temp_env.observation_space.shape[0]
-    action_dim = temp_env.action_space.shape[0]
-    temp_env.close()
-    
-    # Create and load agent
-    agent = SACAgent(obs_dim, action_dim)
-    agent.load(args.model_path)
-    
-    logger.info("Model loaded successfully")
+    try:
+        # Try to load agent with automatic architecture detection
+        agent = SACAgent.load_from_checkpoint(args.model_path)
+        logger.info("Model loaded successfully with automatic architecture detection")
+    except Exception as e:
+        logger.warning(f"Failed to load with automatic detection: {e}")
+        logger.info("Falling back to manual loading...")
+        
+        # Create dummy environment to get dimensions
+        temp_env = make_evaluation_env()
+        obs_dim = temp_env.observation_space.shape[0]
+        action_dim = temp_env.action_space.shape[0]
+        temp_env.close()
+        
+        # Create and load agent with fallback method
+        agent = SACAgent(obs_dim, action_dim)
+        agent.load(args.model_path, strict=False)
+        logger.info("Model loaded successfully with fallback method")
     
     # Determine which tests to run
     tests_to_run = []
