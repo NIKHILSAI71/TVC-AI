@@ -29,6 +29,7 @@ wandb:
   enabled: true  # ENABLE W&B for better tracking
   project: "tvc-ai-improved"
   entity: null
+  run_name: "${globals.experiment_name}"  # Use experiment name as run name
   tags: ["sac", "rocket", "tvc", "curriculum", "improved"]
   notes: "Improved SAC training with curriculum learning and research-backed hyperparameters"
   mode: "online"
