@@ -3,6 +3,7 @@ outputs
 curriculum_output
 evaluation_results
 visualization_output
+wandb
 benchmark_results.json
 *.pyc
 __pycache__
