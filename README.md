@@ -1,17 +1,20 @@
-# TVC-AI: Deep Reinforcement Learning for Rocket Thrust Vector Control
+# TVC-AI: State-of-the-Art Deep Reinforcement Learning for Rocket Thrust Vector Control
 
-![TVC-AI Banner](https://img.shields.io/badge/TVC--AI-Rocket%20Control-blue?style=for-the-badge&logo=rocket)
+![TVC-AI Banner](https://img.shields.io/badge/TVC--AI-State%20of%20the%20Art-blue?style=for-the-badge&logo=rocket)
 
-A comprehensive Deep Reinforcement Learning system for controlling model rocket attitude using Thrust Vector Control (TVC). This project implements a Soft Actor-Critic (SAC) agent trained in a realistic PyBullet physics simulation with domain randomization for robust sim-to-real transfer.
+A **state-of-the-art** Deep Reinforcement Learning system for controlling model rocket attitude using Thrust Vector Control (TVC). This project implements a multi-algorithm ensemble with transformer networks, hierarchical RL, and physics-informed neural networks, trained in a realistic PyBullet physics simulation with comprehensive anti-reward-hacking measures.
 
 ## 🚀 Features
 
-- **SAC Algorithm**: State-of-the-art continuous control with automatic entropy tuning
-- **Realistic Physics**: 6-DOF rocket dynamics simulation using PyBullet
-- **Domain Randomization**: Robust training with mass, thrust, and noise variations
-- **Microcontroller Deployment**: TensorFlow Lite quantization for embedded systems
-- **Comprehensive Training**: Full pipeline with monitoring, evaluation, and export tools
-- **Real-time Capable**: Sub-millisecond inference for real-time control
+- **Multi-Algorithm Ensemble**: PPO + SAC + TD3 with intelligent algorithm selection
+- **Transformer Networks**: Attention-based policies for temporal dependencies
+- **Hierarchical RL**: Automatic skill discovery and decomposition
+- **Physics-Informed**: Domain knowledge integration in neural networks
+- **Curiosity-Driven**: Intrinsic motivation for efficient exploration
+- **Anti-Reward-Hacking**: Real mission success detection with landing criteria
+- **Safety Constraints**: Control Barrier Functions for safe operation
+- **Real-time Monitoring**: Comprehensive reward hacking detection
+- **Adaptive Curriculum**: Progressive learning with 6 difficulty stages
 
 ## Table of Contents
 

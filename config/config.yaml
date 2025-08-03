@@ -1,0 +1,428 @@
+# State-of-the-Art TVC-AI Configuration
+# Incorporating latest 2024-2025 research in Deep RL
+# Designed to eliminate reward hacking and maximize real-world performance
+
+globals:
+  project_name: "TVC-AI-SOTA-2025"
+  experiment_name: "rocket_tvc_sota_multi_algorithm"
+  output_dir: "./outputs/sota/${now:%Y-%m-%d}/${now:%H-%M-%S}"
+  seed: 42
+  debug: false
+  device: auto
+
+# Multi-Algorithm Ensemble Configuration
+algorithms:
+  ensemble:
+    enabled: true
+    algorithms: ["ppo", "sac", "td3"]
+    selection_strategy: "dynamic"  # dynamic, best, voting
+    performance_window: 100
+    
+  ppo:
+    enabled: true
+    clip_range: 0.2
+    clip_range_vf: null
+    ent_coef: 0.01
+    vf_coef: 0.5
+    max_grad_norm: 0.5
+    gae_lambda: 0.95
+    n_steps: 2048
+    n_epochs: 10
+    batch_size: 64
+    learning_rate: 2.5e-4
+    lr_schedule: "linear"
+    
+  sac:
+    enabled: true
+    learning_rate: 3e-4
+    buffer_size: 1000000
+    learning_starts: 100
+    batch_size: 256
+    tau: 0.005
+    gamma: 0.99
+    train_freq: 1
+    gradient_steps: 1
+    ent_coef: "auto"
+    target_update_interval: 1
+    
+  td3:
+    enabled: true
+    learning_rate: 3e-4
+    buffer_size: 1000000
+    learning_starts: 100
+    batch_size: 256
+    tau: 0.005
+    gamma: 0.99
+    train_freq: 1
+    gradient_steps: 1
+    policy_delay: 2
+    target_policy_noise: 0.2
+    target_noise_clip: 0.5
+
+# Advanced Neural Architecture
+network:
+  architecture_type: "transformer"  # transformer, cnn, mlp, hybrid
+  
+  transformer:
+    enabled: true
+    d_model: 256
+    nhead: 8
+    num_layers: 4
+    dim_feedforward: 512
+    dropout: 0.1
+    attention_type: "multihead"  # multihead, sparse, local
+    
+  mlp_backbone:
+    hidden_dims: [512, 512, 256]
+    activation: "gelu"  # gelu, relu, swish, mish
+    layer_norm: true
+    dropout: 0.1
+    spectral_norm: true
+    
+  policy_head:
+    use_separate_critic: true
+    shared_layers: 2
+    policy_layers: [256, 128]
+    value_layers: [256, 128]
+    
+  advanced_features:
+    use_attention: true
+    use_residual_connections: true
+    use_batch_norm: false
+    use_layer_norm: true
+
+# Hierarchical RL Configuration
+hierarchical_rl:
+  enabled: true
+  levels: 2
+  
+  high_level:
+    horizon: 50  # steps
+    action_space: "discrete"  # mission goals
+    goals: ["hover", "land", "recover", "maintain_altitude"]
+    network_size: [256, 128]
+    learning_rate: 1e-4
+    
+  low_level:
+    horizon: 10  # steps
+    action_space: "continuous"  # gimbal controls
+    network_size: [512, 256, 128]
+    learning_rate: 3e-4
+
+# Curiosity and Exploration
+exploration:
+  curiosity:
+    enabled: true
+    type: "icm"  # icm, rnd, ngu
+    intrinsic_reward_weight: 0.01
+    network_size: [256, 128]
+    learning_rate: 1e-4
+    
+  random_network_distillation:
+    enabled: true
+    network_size: [256, 128]
+    update_frequency: 100
+    
+  noise_injection:
+    action_noise: 0.1
+    parameter_noise: 0.02
+    observation_noise: 0.01
+
+# Physics-Informed Neural Networks
+physics_informed:
+  enabled: true
+  physics_loss_weight: 0.1
+  dynamics_model:
+    enabled: true
+    network_size: [256, 128]
+    learning_rate: 1e-4
+    update_frequency: 10
+    
+  conservation_laws:
+    momentum_conservation: true
+    energy_conservation: true
+    angular_momentum_conservation: true
+
+# Mission Success Detection (CRITICAL FIX)
+mission_success:
+  enabled: true
+  success_criteria:
+    # Real-world landing requirements based on SpaceX data
+    max_tilt_angle: 0.087  # 5 degrees (real-world threshold)
+    max_angular_velocity: 0.1  # rad/s
+    max_horizontal_velocity: 0.5  # m/s
+    max_vertical_velocity: 2.0  # m/s (safe landing speed)
+    min_altitude: 0.2  # m (ground contact)
+    max_altitude: 2.0   # m (hovering range)
+    position_tolerance: 1.0  # m (landing precision)
+    
+  success_duration: 100  # steps (2 seconds at 50Hz)
+  
+  # Mission phases
+  phases:
+    boost: {duration: 100, criteria: "altitude_gain"}
+    coast: {duration: 200, criteria: "stable_flight"}
+    landing: {duration: 300, criteria: "controlled_descent"}
+    touchdown: {duration: 100, criteria: "soft_landing"}
+
+# Advanced Reward Function (Anti-Hacking)
+reward_function:
+  type: "multi_objective"
+  
+  # Primary objectives (80% of reward)
+  primary:
+    mission_completion: 
+      weight: 100.0
+      type: "sparse"  # Only given on actual success
+      
+    safety_compliance:
+      weight: 50.0
+      criteria: ["attitude", "velocity", "altitude"]
+      
+    fuel_efficiency:
+      weight: 20.0
+      type: "continuous"
+      
+  # Secondary objectives (20% of reward) 
+  secondary:
+    stability_bonus:
+      weight: 10.0
+      threshold: 0.05  # radians
+      
+    smooth_control:
+      weight: 5.0
+      penalty_for_jitter: true
+      
+    altitude_maintenance:
+      weight: 5.0
+      target_range: [1.0, 5.0]
+      
+  # Penalties
+  penalties:
+    crash_penalty: -1000.0
+    excessive_tilt_penalty: -500.0
+    fuel_waste_penalty: -100.0
+    control_saturation_penalty: -50.0
+    
+  # Anti-hacking measures
+  anti_hacking:
+    reward_clipping: [-1000.0, 200.0]
+    gradient_penalty: 0.1
+    diversity_bonus: 0.05
+    temporal_consistency_check: true
+
+# Dynamic Curriculum Learning
+curriculum:
+  enabled: true
+  type: "adaptive"  # adaptive, linear, exponential
+  
+  automatic_progression:
+    enabled: true
+    success_threshold: 0.8
+    stability_window: 50
+    
+  stages:
+    # Stage 1: Basic Stability
+    stage_1:
+      name: "hover_training"
+      episodes: 200
+      environment:
+        wind_force: 0.0
+        mass_variation: 0.05
+        initial_tilt_max: 0.05  # 3 degrees
+        success_threshold: 0.7
+        
+    # Stage 2: Light Disturbances  
+    stage_2:
+      name: "disturbance_rejection"
+      episodes: 300
+      environment:
+        wind_force: 0.5
+        mass_variation: 0.1
+        initial_tilt_max: 0.1  # 6 degrees
+        success_threshold: 0.75
+        
+    # Stage 3: Moderate Conditions
+    stage_3:
+      name: "moderate_control"
+      episodes: 400
+      environment:
+        wind_force: 1.0
+        mass_variation: 0.15
+        initial_tilt_max: 0.2  # 12 degrees
+        success_threshold: 0.8
+        
+    # Stage 4: Challenging Conditions
+    stage_4:
+      name: "advanced_control"
+      episodes: 500
+      environment:
+        wind_force: 2.0
+        mass_variation: 0.2
+        initial_tilt_max: 0.4  # 23 degrees
+        success_threshold: 0.85
+        
+    # Stage 5: Extreme Conditions
+    stage_5:
+      name: "extreme_robustness"
+      episodes: 600
+      environment:
+        wind_force: 3.0
+        mass_variation: 0.3
+        initial_tilt_max: 0.7  # 40 degrees
+        success_threshold: 0.9
+
+# Safety and Constraints
+safety:
+  constrained_rl:
+    enabled: true
+    constraint_types: ["attitude", "velocity", "altitude", "fuel"]
+    
+    constraints:
+      max_tilt: 0.52  # 30 degrees (safety limit)
+      max_angular_velocity: 5.0  # rad/s
+      min_altitude: 0.1  # m
+      max_altitude: 20.0  # m
+      fuel_reserve: 0.1  # 10% fuel reserve required
+      
+  safety_layer:
+    enabled: true
+    type: "cbf"  # cbf (Control Barrier Functions), shield, filter
+    intervention_threshold: 0.9
+    
+  emergency_protocols:
+    auto_shutdown: true
+    emergency_landing: true
+    parachute_deployment: false  # for real rockets
+
+# Training Configuration
+training:
+  total_timesteps: 2000000  # 2M steps
+  eval_freq: 5000
+  eval_episodes: 20
+  save_freq: 10000
+  
+  early_stopping:
+    enabled: true
+    patience: 200000  # timesteps
+    min_improvement: 0.01
+    metric: "success_rate"
+    
+  checkpointing:
+    save_best: true
+    save_last: true
+    save_periodic: true
+    period: 50000
+
+# Environment Configuration
+env:
+  max_episode_steps: 1000  # Consistent with evaluation
+  physics_timestep: 0.02  # 50Hz
+  control_timestep: 0.1   # 10Hz control
+  
+  domain_randomization:
+    enabled: true
+    progressive: true  # Increase with curriculum
+    
+    parameters:
+      mass: {variation: 0.3, distribution: "uniform"}
+      thrust: {variation: 0.2, distribution: "normal"}
+      cg_offset: {max: 0.1, distribution: "uniform"}
+      wind: {max_force: 3.0, distribution: "normal"}
+      sensor_noise: {std: 0.02, distribution: "normal"}
+      
+  # Real-world physics
+  physics:
+    gravity: -9.81
+    air_density: 1.225
+    drag_coefficient: 0.47  # sphere approximation
+    magnus_effect: true
+    ground_effect: true
+    
+# Evaluation and Testing
+evaluation:
+  scenarios:
+    # Standard conditions
+    nominal:
+      episodes: 50
+      conditions: "standard"
+      
+    # Stress testing
+    robustness:
+      episodes: 30
+      conditions: "extreme"
+      wind_force: 5.0
+      mass_variation: 0.5
+      
+    # Mission-specific
+    landing:
+      episodes: 20
+      target_altitude: 0.5
+      precision_required: 0.5
+      
+    hovering:
+      episodes: 20
+      target_altitude: 3.0
+      duration_required: 500  # 10 seconds
+      
+  metrics:
+    primary: ["success_rate", "mission_completion_rate", "safety_violations"]
+    secondary: ["fuel_efficiency", "control_smoothness", "precision"]
+    
+# Logging and Monitoring
+logging:
+  level: INFO
+  wandb:
+    enabled: true
+    project: "tvc-ai-sota-2025"
+    tags: ["sota", "multi-algorithm", "hierarchical", "physics-informed"]
+    
+  tensorboard:
+    enabled: true
+    log_graph: true
+    log_histograms: true
+    
+  metrics:
+    log_frequency: 100
+    save_frequency: 1000
+    
+# Hardware Optimization
+hardware:
+  device: "auto"
+  mixed_precision: true
+  compile_model: true  # PyTorch 2.0 compilation
+  
+  distributed:
+    enabled: false
+    backend: "nccl"
+    
+  optimization:
+    gradient_checkpointing: true
+    memory_efficient_attention: true
+
+# Experimental Features (Cutting Edge)
+experimental:
+  # Decision Transformer
+  decision_transformer:
+    enabled: false
+    context_length: 20
+    embed_dim: 128
+    
+  # Meta-Learning
+  meta_learning:
+    enabled: false
+    algorithm: "maml"  # maml, reptile, anil
+    inner_steps: 5
+    meta_lr: 1e-3
+    
+  # Multi-Agent Training
+  multi_agent:
+    enabled: false
+    num_agents: 4
+    cooperation_reward: 10.0
+    
+  # Offline RL
+  offline_rl:
+    enabled: false
+    dataset_size: 100000
+    algorithm: "cql"  # cql, awac, iql
