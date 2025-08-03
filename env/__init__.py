@@ -13,84 +13,99 @@
 # limitations under the License.
 
 """
-Environment Registration Module
+Environment Registration Module - State-of-the-Art TVC
 
-This module provides registration utilities for the Rocket TVC environments
-with Gymnasium, enabling easy creation and configuration of environments
-for different training scenarios.
+This module provides registration utilities for the Enhanced Rocket TVC environment
+with Gymnasium, enabling easy creation and configuration of the state-of-the-art
+environment with anti-reward-hacking features.
 """
 
 import gymnasium as gym
 from gymnasium.envs.registration import register
-from .rocket_tvc_env import RocketTVCEnv, RocketConfig
+from .enhanced_rocket_tvc_env import EnhancedRocketTVCEnv, MissionPhase
 
-# Register the main TVC environment
+# Register the state-of-the-art Enhanced TVC environment
 register(
-    id='RocketTVC-v0',
-    entry_point='env.rocket_tvc_env:RocketTVCEnv',
+    id='EnhancedRocketTVC-v0',
+    entry_point='env.enhanced_rocket_tvc_env:EnhancedRocketTVCEnv',
     max_episode_steps=1000,
     kwargs={
-        'domain_randomization': True,
-        'sensor_noise': True,
-        'use_rocketpy': False
+        'enable_hierarchical': True,
+        'enable_curiosity': True,
+        'enable_physics_informed': True,
+        'debug': False
     }
 )
 
-# Register a simplified version for faster training
+# Register a deterministic version for evaluation
 register(
-    id='RocketTVC-Simple-v0', 
-    entry_point='env.rocket_tvc_env:RocketTVCEnv',
-    max_episode_steps=500,
+    id='EnhancedRocketTVC-Eval-v0', 
+    entry_point='env.enhanced_rocket_tvc_env:EnhancedRocketTVCEnv',
+    max_episode_steps=1000,
     kwargs={
-        'domain_randomization': False,
-        'sensor_noise': False,
-        'use_rocketpy': False
+        'enable_hierarchical': False,
+        'enable_curiosity': False,
+        'enable_physics_informed': False,
+        'debug': False
     }
 )
 
-# Register a high-fidelity version with RocketPy
+# Register a debug version with visualization
 register(
-    id='RocketTVC-HighFidelity-v0',
-    entry_point='env.rocket_tvc_env:RocketTVCEnv', 
-    max_episode_steps=1500,
+    id='EnhancedRocketTVC-Debug-v0',
+    entry_point='env.enhanced_rocket_tvc_env:EnhancedRocketTVCEnv', 
+    max_episode_steps=1000,
     kwargs={
-        'domain_randomization': True,
-        'sensor_noise': True,
-        'use_rocketpy': True
+        'enable_hierarchical': True,
+        'enable_curiosity': True,
+        'enable_physics_informed': True,
+        'debug': True
     }
 )
 
 # Pre-configured environments for different scenarios
-def make_training_env(**kwargs):
-    """Create environment optimized for training."""
+def make_training_env(config=None, **kwargs):
+    """Create enhanced environment optimized for state-of-the-art training."""
     default_kwargs = {
-        'domain_randomization': True,
-        'sensor_noise': True,
         'max_episode_steps': 1000,
+        'enable_hierarchical': True,
+        'enable_curiosity': True,
+        'enable_physics_informed': True,
         'debug': False
     }
     default_kwargs.update(kwargs)
-    return RocketTVCEnv(**default_kwargs)
+    return EnhancedRocketTVCEnv(config=config, **default_kwargs)
 
-def make_evaluation_env(**kwargs):
-    """Create environment for evaluation with nominal parameters."""
+def make_evaluation_env(config=None, **kwargs):
+    """Create environment for evaluation with deterministic behavior."""
     default_kwargs = {
-        'domain_randomization': False,
-        'sensor_noise': False,
-        'max_episode_steps': 2000,
-        'debug': True
+        'max_episode_steps': 1000,
+        'enable_hierarchical': False,
+        'enable_curiosity': False,
+        'enable_physics_informed': False,
+        'debug': False
     }
     default_kwargs.update(kwargs)
-    return RocketTVCEnv(**default_kwargs)
+    return EnhancedRocketTVCEnv(config=config, **default_kwargs)
 
-def make_debug_env(**kwargs):
-    """Create environment for debugging with visualization."""
+def make_debug_env(config=None, **kwargs):
+    """Create environment for debugging with all features enabled."""
     default_kwargs = {
         'render_mode': 'human',
-        'domain_randomization': False,
-        'sensor_noise': False,
         'max_episode_steps': 1000,
+        'enable_hierarchical': True,
+        'enable_curiosity': True,
+        'enable_physics_informed': True,
         'debug': True
     }
     default_kwargs.update(kwargs)
-    return RocketTVCEnv(**default_kwargs)
+    return EnhancedRocketTVCEnv(config=config, **default_kwargs)
+
+# Export main classes and functions
+__all__ = [
+    'EnhancedRocketTVCEnv',
+    'MissionPhase',
+    'make_training_env',
+    'make_evaluation_env', 
+    'make_debug_env'
+]
