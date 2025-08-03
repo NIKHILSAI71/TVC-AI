@@ -66,62 +66,90 @@ class CurriculumManager:
             self.logger.warning("Curriculum learning is disabled!")
             return stages
         
-        # Use configured stages if provided, otherwise use defaults
-        stage_configs = self.config.get('stages', [
-            {
-                'name': 'basic_stabilization',
-                'duration_steps': 150000,
-                'conditions': {
-                    'max_initial_tilt': 0.5,
-                    'max_initial_angular_vel': 0.1,
-                    'domain_randomization': False,
-                    'sensor_noise': False,
-                    'max_gimbal_angle': 10.0,
-                    'wind_enabled': False
+        # Convert dictionary-based stages to list format
+        stages_config = self.config.get('stages', {})
+        if isinstance(stages_config, dict):
+            # Convert from new dict format to list format
+            stage_configs = []
+            for stage_name, stage_data in stages_config.items():
+                if isinstance(stage_data, dict):
+                    stage_config = {
+                        'name': stage_data.get('name', stage_name),
+                        'duration_steps': stage_data.get('episodes', 200) * 1000,  # Convert episodes to steps
+                        'conditions': {
+                            'max_initial_tilt': stage_data.get('environment', {}).get('initial_tilt_max', 0.1),
+                            'max_initial_angular_vel': 0.1,
+                            'domain_randomization': stage_data.get('environment', {}).get('mass_variation', 0) > 0,
+                            'sensor_noise': False,
+                            'max_gimbal_angle': 10.0,
+                            'wind_enabled': stage_data.get('environment', {}).get('wind_force', 0) > 0,
+                            'wind_force': stage_data.get('environment', {}).get('wind_force', 0),
+                            'mass_variation': stage_data.get('environment', {}).get('mass_variation', 0)
+                        },
+                        'success_criteria': {
+                            'min_success_rate': stage_data.get('environment', {}).get('success_threshold', 0.7),
+                            'min_avg_reward': 100.0,
+                            'evaluation_episodes': 50
+                        }
+                    }
+                    stage_configs.append(stage_config)
+        else:
+            # Use provided list format or defaults
+            stage_configs = stages_config if isinstance(stages_config, list) else [
+                {
+                    'name': 'basic_stabilization',
+                    'duration_steps': 150000,
+                    'conditions': {
+                        'max_initial_tilt': 0.5,
+                        'max_initial_angular_vel': 0.1,
+                        'domain_randomization': False,
+                        'sensor_noise': False,
+                        'max_gimbal_angle': 10.0,
+                        'wind_enabled': False
+                    },
+                    'success_criteria': {
+                        'min_success_rate': 0.6,
+                        'min_avg_reward': 100.0,
+                        'evaluation_episodes': 50
+                    }
                 },
-                'success_criteria': {
-                    'min_success_rate': 0.6,
-                    'min_avg_reward': 100.0,
-                    'evaluation_episodes': 50
-                }
-            },
-            {
-                'name': 'moderate_disturbances',
-                'duration_steps': 200000,
-                'conditions': {
-                    'max_initial_tilt': 2.0,
-                    'max_initial_angular_vel': 0.3,
-                    'domain_randomization': True,
-                    'randomization_strength': 0.3,
-                    'sensor_noise': False,
-                    'max_gimbal_angle': 15.0,
-                    'wind_enabled': False
+                {
+                    'name': 'moderate_disturbances',
+                    'duration_steps': 200000,
+                    'conditions': {
+                        'max_initial_tilt': 2.0,
+                        'max_initial_angular_vel': 0.3,
+                        'domain_randomization': True,
+                        'randomization_strength': 0.3,
+                        'sensor_noise': False,
+                        'max_gimbal_angle': 15.0,
+                        'wind_enabled': False
+                    },
+                    'success_criteria': {
+                        'min_success_rate': 0.5,
+                        'min_avg_reward': 200.0,
+                        'evaluation_episodes': 50
+                    }
                 },
-                'success_criteria': {
-                    'min_success_rate': 0.5,
-                    'min_avg_reward': 200.0,
-                    'evaluation_episodes': 50
+                {
+                    'name': 'full_challenge',
+                    'duration_steps': 300000,
+                    'conditions': {
+                        'max_initial_tilt': 5.0,
+                        'max_initial_angular_vel': 0.5,
+                        'domain_randomization': True,
+                        'randomization_strength': 1.0,
+                        'sensor_noise': True,
+                        'max_gimbal_angle': 25.0,
+                        'wind_enabled': True
+                    },
+                    'success_criteria': {
+                        'min_success_rate': 0.4,
+                        'min_avg_reward': 300.0,
+                        'evaluation_episodes': 100
+                    }
                 }
-            },
-            {
-                'name': 'full_challenge',
-                'duration_steps': 300000,
-                'conditions': {
-                    'max_initial_tilt': 5.0,
-                    'max_initial_angular_vel': 0.5,
-                    'domain_randomization': True,
-                    'randomization_strength': 1.0,
-                    'sensor_noise': True,
-                    'max_gimbal_angle': 25.0,
-                    'wind_enabled': True
-                },
-                'success_criteria': {
-                    'min_success_rate': 0.4,
-                    'min_avg_reward': 300.0,
-                    'evaluation_episodes': 100
-                }
-            }
-        ])
+            ]
         
         for config in stage_configs:
             stage = CurriculumStage(
