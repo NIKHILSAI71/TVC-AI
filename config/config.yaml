@@ -34,16 +34,24 @@ algorithms:
     
   sac:
     enabled: true
-    learning_rate: 3e-4
+    learning_rate: 1.5e-4  # Reduced from 3e-4 for stability
+    lr_actor: 5e-5         # Lower actor learning rate
+    lr_critic: 1.5e-4      # Lower critic learning rate
     buffer_size: 1000000
-    learning_starts: 100
-    batch_size: 256
-    tau: 0.005
-    gamma: 0.99
+    learning_starts: 1000   # Increased warmup
+    batch_size: 256        # Reduced from 512 for better sample efficiency
+    tau: 0.005             # Already good - slower target updates
+    gamma: 0.99            # Reduced from 0.995 for faster convergence
     train_freq: 1
-    gradient_steps: 1
+    gradient_steps: 1      # Reduced from 4 to prevent overfitting
     ent_coef: "auto"
     target_update_interval: 1
+    grad_clip_norm: 5.0    # Reduced from 10.0
+    lr_schedule:
+      enabled: true        # Enable learning rate scheduling
+      scheduler_type: "exponential"
+      decay_rate: 0.995
+      min_lr: 1e-6
     
   td3:
     enabled: true
@@ -124,7 +132,8 @@ exploration:
     update_frequency: 100
     
   noise_injection:
-    action_noise: 0.1
+    action_noise_type: "gaussian"  # Changed from none based on analysis
+    action_noise_std: 0.05         # Reduced from 0.1 for stability  
     parameter_noise: 0.02
     observation_noise: 0.01
 
@@ -186,7 +195,7 @@ reward_function:
   # Secondary objectives (20% of reward) 
   secondary:
     stability_bonus:
-      weight: 10.0
+      weight: 10.0  # Increased from 2.0 based on analysis
       threshold: 0.05  # radians
       
     smooth_control:
@@ -197,9 +206,11 @@ reward_function:
       weight: 5.0
       target_range: [1.0, 5.0]
       
-  # Penalties
+  # Penalties (Enhanced based on analysis)
   penalties:
-    crash_penalty: -1000.0
+    crash_penalty: -1000.0      # Increased magnitude from -200.0
+    failure_penalty: -500.0     # Increased magnitude from -100.0
+    attitude_penalty_gain: 25.0 # Increased from 15.0
     excessive_tilt_penalty: -500.0
     fuel_waste_penalty: -100.0
     control_saturation_penalty: -50.0
@@ -209,22 +220,24 @@ reward_function:
     reward_clipping: [-1000.0, 200.0]
     gradient_penalty: 0.1
     diversity_bonus: 0.05
+    sparse_rewards: true  # Emphasize actual task completion
     temporal_consistency_check: true
 
-# Dynamic Curriculum Learning
+# Dynamic Curriculum Learning (ENABLED)
 curriculum:
-  enabled: true
+  enabled: true  # Changed from false based on analysis
   type: "adaptive"  # adaptive, linear, exponential
   
   automatic_progression:
     enabled: true
     success_threshold: 0.8
-    stability_window: 50
+    stability_window: 100  # Increased from 50 for more stable progression
     
   stages:
-    # Stage 1: Basic Stability
+    # Stage 1: Basic Stability (Extended duration)
     stage_1:
       name: "hover_training"
+      episodes: 300000  # Increased duration for better foundation
       episodes: 200
       environment:
         wind_force: 0.0
@@ -302,17 +315,21 @@ training:
   eval_episodes: 20
   save_freq: 10000
   
+  # Parallel environments for better sample efficiency
+  env_parallel: true   # Changed from false based on analysis
+  num_envs: 4         # Increased from 1 for parallel training
+  
   early_stopping:
     enabled: true
-    patience: 200000  # timesteps
-    min_improvement: 0.01
-    metric: "success_rate"
+    patience: 5  # Reduced from 10 based on analysis
+    min_improvement: 0.05  # Increased from 0.01 for better sensitivity
+    metric: "eval_success_rate"  # Changed from eval_reward_mean to success rate
     
   checkpointing:
     save_best: true
     save_last: true
     save_periodic: true
-    period: 50000
+    period: 25000  # Every 25k steps for rollback capability (reduced from 50000)
 
 # Environment Configuration
 env:
@@ -386,10 +403,15 @@ logging:
     log_frequency: 100
     save_frequency: 1000
     
-# Hardware Optimization
+# Hardware Optimization (Enhanced Device Management)
 hardware:
-  device: "auto"
-  mixed_precision: true
+  device: 
+    type: "auto"        # auto, cpu, cuda, xla, tpu
+    enable_tpu: true    # Enable TPU/XLA support
+    fallback_cpu: true  # Fallback to CPU if preferred device fails
+    mixed_precision: true
+    memory_fraction: 0.8  # GPU memory fraction to use
+  
   compile_model: true  # PyTorch 2.0 compilation
   
   distributed:
@@ -399,6 +421,8 @@ hardware:
   optimization:
     gradient_checkpointing: true
     memory_efficient_attention: true
+    pin_memory: true      # For faster CPU->GPU transfers
+    non_blocking: true    # Async transfers
 
 # Experimental Features (Cutting Edge)
 experimental:

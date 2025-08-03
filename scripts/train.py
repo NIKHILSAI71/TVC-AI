@@ -45,6 +45,11 @@ from env.enhanced_rocket_tvc_env import EnhancedRocketTVCEnv, MissionPhase
 from agent.multi_algorithm_agent import MultiAlgorithmAgent
 from scripts.curriculum_manager import CurriculumManager
 
+# Import new stability and device management utilities
+from utils.device_manager import DeviceManager, get_device_manager, to_device, to_numpy
+from utils.training_stability import TrainingStabilityManager, create_stability_manager, StabilityConfig
+from utils.comprehensive_logger import DeviceAwareLogger
+
 @dataclass
 class TrainingMetrics:
     """Comprehensive training metrics tracking"""
@@ -169,6 +174,9 @@ class StateOfTheArtTrainer:
         with open(config_path, 'r') as f:
             self.config = yaml.safe_load(f)
         
+        # Initialize device manager first
+        self.setup_device_manager()
+        
         # Setup logging and output
         self.setup_logging()
         self.logger = logging.getLogger(__name__)
@@ -178,7 +186,10 @@ class StateOfTheArtTrainer:
         self.setup_agent()
         self.setup_training()
         
-        # Metrics and monitoring
+        # Initialize stability manager
+        self.setup_stability_manager()
+        
+        # Metrics and monitoring (keeping original for backward compatibility)
         self.metrics = TrainingMetrics()
         self.reward_hacking_detector = RewardHackingDetector()
         
@@ -188,9 +199,56 @@ class StateOfTheArtTrainer:
         self.best_success_rate = 0.0
         self.training_start_time = time.time()
         self.no_improvement_steps = 0
+    
+    def setup_device_manager(self):
+        """Initialize device manager for CPU/GPU/TPU compatibility"""
+        # Get device config from hardware section
+        hardware_config = self.config.get('hardware', {})
+        device_config = hardware_config.get('device', {})
+        
+        # Handle both old and new config formats
+        if isinstance(device_config, str):
+            prefer_device = device_config
+            enable_tpu = True
+        else:
+            prefer_device = device_config.get('type', 'auto')
+            enable_tpu = device_config.get('enable_tpu', True)
+        
+        self.device_manager = get_device_manager(prefer_device, enable_tpu)
+        self.device = self.device_manager.device
+        
+        self.logger = logging.getLogger(__name__)
+        self.logger.info(f"🔧 Device Manager initialized: {self.device}")
+        self.logger.info(f"🔧 Device type: {self.device_manager.device_type}")
+        
+        # Log device capabilities
+        if self.device_manager.device_type == 'cuda':
+            self.logger.info(f"🚀 GPU Memory: {torch.cuda.get_device_properties(0).total_memory / 1e9:.1f} GB")
+        elif self.device_manager.device_type == 'xla':
+            self.logger.info("⚡ TPU/XLA acceleration enabled")
+        else:
+            self.logger.info("🖥️ Running on CPU")
+    
+    def setup_stability_manager(self):
+        """Initialize training stability manager"""
+        total_steps = self.config.get('training', {}).get('total_timesteps', 2000000)
+        conservative = self.config.get('stability', {}).get('conservative', True)
+        
+        # Create stability manager with recommended settings
+        self.stability_manager = create_stability_manager(total_steps, conservative)
+        
+        # Override with custom config if provided
+        stability_config = self.config.get('stability', {})
+        if stability_config:
+            # Update stability manager config
+            for key, value in stability_config.items():
+                if hasattr(self.stability_manager.config, key):
+                    setattr(self.stability_manager.config, key, value)
+        
+        self.logger.info("🎛️ Training Stability Manager configured")
         
     def setup_logging(self):
-        """Setup comprehensive logging with W&B integration"""
+        """Setup comprehensive logging with device awareness"""
         # Create timestamped output directory
         base_output_dir = Path(self.config['globals']['output_dir'])
         timestamp = datetime.now().strftime('%Y-%m-%d/%H-%M-%S')
@@ -200,7 +258,14 @@ class StateOfTheArtTrainer:
         # Update config with actual output directory
         self.config['globals']['actual_output_dir'] = str(output_dir)
         
-        # Configure logging with UTF-8 encoding for Windows compatibility
+        # Initialize comprehensive device-aware logger
+        self.comprehensive_logger = DeviceAwareLogger(
+            name="TVC_Training",
+            log_dir=str(output_dir / "logs"),
+            device_manager=self.device_manager
+        )
+        
+        # Keep original logger for backward compatibility
         log_level = getattr(logging, self.config.get('logging', {}).get('level', 'INFO'))
         
         # Setup UTF-8 encoding for Windows console
@@ -265,17 +330,34 @@ class StateOfTheArtTrainer:
         self.logger.info(f"  Max episode steps: {env_config.get('max_episode_steps', 1000)}")
     
     def setup_agent(self):
-        """Setup multi-algorithm agent ensemble"""
+        """Setup multi-algorithm agent ensemble with device management"""
         obs_dim = self.env.observation_space.shape[0]
         action_dim = self.env.action_space.shape[0]
         
+        # Update config with device information
+        self.config['device'] = {
+            'type': str(self.device),
+            'device_type': self.device_manager.device_type
+        }
+        
         self.agent = MultiAlgorithmAgent(obs_dim, action_dim, self.config)
+        
+        # Move agent to device with proper error handling
+        try:
+            self.agent = self.device_manager.move_model_to_device(self.agent)
+        except Exception as e:
+            self.logger.error(f"❌ Failed to move agent to device: {e}")
+            self.logger.info("🔄 Falling back to CPU")
+            self.device = torch.device('cpu')
+            self.agent = self.agent.to(self.device)
         
         self.logger.info("Multi-algorithm ensemble agent created:")
         algorithms = self.config.get('algorithms', {})
         for alg_name, alg_config in algorithms.items():
             if alg_config.get('enabled', False) and alg_name != 'ensemble':
                 self.logger.info(f"  - {alg_name.upper()} with transformer networks")
+        
+        self.logger.info(f"Agent moved to device: {self.device}")
     
     def setup_training(self):
         """Setup training configuration and components"""
@@ -302,10 +384,23 @@ class StateOfTheArtTrainer:
         self.early_stopping_patience = early_stopping.get('patience', 200000)
         self.early_stopping_min_improvement = early_stopping.get('min_improvement', 0.01)
         
+        # Setup stability manager with agent
+        if hasattr(self, 'stability_manager') and hasattr(self, 'agent'):
+            # Setup model for stability tracking
+            self.stability_manager.setup_model(self.agent)
+            
+            # Setup optimizer if available
+            if hasattr(self.agent, 'optimizers'):
+                for optimizer in self.agent.optimizers:
+                    self.stability_manager.setup_optimizer(optimizer)
+        
         self.logger.info(f"Training configured for {self.total_timesteps_target:,} timesteps")
         
     def train(self):
-        """Main state-of-the-art training loop"""
+        """Main state-of-the-art training loop with comprehensive logging"""
+        # Log training start with configuration
+        self.comprehensive_logger.log_training_start(self.config)
+        
         self.logger.info(">>> Starting State-of-the-Art TVC Training!")
         self.logger.info("="*80)
         self.logger.info("Features enabled:")
@@ -317,6 +412,7 @@ class StateOfTheArtTrainer:
         self.logger.info("  [X] Adaptive curriculum learning")
         self.logger.info("  [X] Real-time reward hacking detection")
         self.logger.info("  [X] Mission success detection with real landing criteria")
+        self.logger.info("  [X] Device-aware comprehensive logging")
         self.logger.info("="*80)
         
         episode_rewards = deque(maxlen=100)
@@ -336,6 +432,14 @@ class StateOfTheArtTrainer:
             self.metrics.episode_rewards.append(episode_info['reward'])
             self.metrics.episode_lengths.append(episode_info['length'])
             
+            # Log episode with comprehensive logger
+            self.comprehensive_logger.log_episode(self.current_episode, {
+                'reward': episode_info['reward'],
+                'success': episode_info['success'],
+                'length': episode_info['length'],
+                'algorithm_used': episode_info.get('algorithm', 'unknown')
+            })
+            
             # Add to reward hacking detector
             self.reward_hacking_detector.add_episode(
                 episode_info['reward'], 
@@ -351,11 +455,15 @@ class StateOfTheArtTrainer:
             # Log progress
             if self.current_episode % self.config.get('logging', {}).get('log_frequency', 10) == 0:
                 self.log_training_progress(episode_rewards, episode_lengths, episode_successes)
+                # Log device performance
+                self.comprehensive_logger.log_device_performance(self.total_timesteps)
             
             # Evaluate periodically
             if self.total_timesteps % self.eval_freq == 0:
                 eval_results = self.evaluate()
                 self.log_evaluation_results(eval_results)
+                # Log evaluation with comprehensive logger
+                self.comprehensive_logger.log_evaluation(self.total_timesteps, eval_results)
                 
                 # Check for improvement
                 if eval_results['success_rate'] > self.best_success_rate + self.early_stopping_min_improvement:
@@ -381,6 +489,12 @@ class StateOfTheArtTrainer:
                 hacking_info = self.reward_hacking_detector.detect_hacking()
                 self.metrics.hacking_scores.append(hacking_info['hacking_score'])
                 
+                # Log with comprehensive logger
+                self.comprehensive_logger.log_reward_hacking_detection(
+                    hacking_info['hacking_score'],
+                    hacking_info['indicators']
+                )
+                
                 if hacking_info['hacking_score'] > 0.7:
                     self.logger.warning(f"!!! Potential reward hacking detected! Score: {hacking_info['hacking_score']:.3f}")
                     self.logger.warning(f"Indicators: {hacking_info['indicators']}")
@@ -405,6 +519,10 @@ class StateOfTheArtTrainer:
         
         # Training summary
         self.log_training_summary()
+        
+        # Comprehensive logger summary and plots
+        self.comprehensive_logger.log_training_summary()
+        self.comprehensive_logger.save_training_plots()
     
     def run_episode(self) -> Dict[str, Any]:
         """Run a single training episode with all enhancements"""
@@ -418,9 +536,22 @@ class StateOfTheArtTrainer:
         algorithm = self.agent.select_algorithm()
         
         while True:
-            # Get action from ensemble
-            action, action_info = self.agent.get_action(torch.FloatTensor(obs).unsqueeze(0))
-            action = action[0]  # Remove batch dimension - already numpy
+            # Get action from ensemble with proper device handling
+            obs_tensor = self.device_manager.to_device(torch.FloatTensor(obs).unsqueeze(0))
+            
+            try:
+                action, action_info = self.agent.get_action(obs_tensor)
+                
+                # Safely convert to numpy using device manager
+                action = self.device_manager.to_numpy(action)
+                
+                # Handle batch dimension if present
+                if action.ndim > 1:
+                    action = action.flatten()
+                    
+            except Exception as e:
+                self.logger.warning(f"Action selection failed: {e}. Using random action.")
+                action = self.env.action_space.sample()
             
             # Step environment
             next_obs, reward, terminated, truncated, step_info = self.env.step(action)
@@ -434,13 +565,13 @@ class StateOfTheArtTrainer:
             # Update agent
             if self.total_timesteps >= 1000:  # Start training after warmup
                 try:
-                    # Create batch dictionary for agent update
+                    # Create batch dictionary for agent update with device management
                     batch = {
-                        'states': torch.FloatTensor(obs).unsqueeze(0).to(self.agent.device),
-                        'actions': torch.FloatTensor(action).unsqueeze(0).to(self.agent.device),
-                        'rewards': torch.FloatTensor([reward]).to(self.agent.device),
-                        'next_states': torch.FloatTensor(next_obs).unsqueeze(0).to(self.agent.device),
-                        'dones': torch.BoolTensor([terminated or truncated]).to(self.agent.device)
+                        'states': self.device_manager.to_device(torch.FloatTensor(obs).unsqueeze(0)),
+                        'actions': self.device_manager.to_device(torch.FloatTensor(action).unsqueeze(0)),
+                        'rewards': self.device_manager.to_device(torch.FloatTensor([reward])),
+                        'next_states': self.device_manager.to_device(torch.FloatTensor(next_obs).unsqueeze(0)),
+                        'dones': self.device_manager.to_device(torch.BoolTensor([terminated or truncated]))
                     }
                     losses = self.agent.update(batch)
                     
@@ -517,12 +648,22 @@ class StateOfTheArtTrainer:
             safety_violations = 0
             
             while True:
-                # Get deterministic action
-                action, _ = self.agent.get_action(
-                    torch.FloatTensor(obs).unsqueeze(0), 
-                    deterministic=True
-                )
-                action = action[0].cpu().numpy()
+                # Get deterministic action with proper device-aware type handling
+                obs_tensor = self.device_manager.to_device(torch.FloatTensor(obs).unsqueeze(0))
+                
+                try:
+                    action, _ = self.agent.get_action(obs_tensor, deterministic=True)
+                    
+                    # Safely convert to numpy using device manager
+                    action = self.device_manager.to_numpy(action)
+                    
+                    # Ensure 1D array for environment step
+                    if action.ndim > 1:
+                        action = action.flatten()
+                        
+                except Exception as e:
+                    self.logger.warning(f"Action selection failed: {e}. Using random action.")
+                    action = self.eval_env.action_space.sample()
                 
                 obs, reward, terminated, truncated, info = self.eval_env.step(action)
                 

@@ -7,6 +7,7 @@ Incorporates latest 2024-2025 deep RL research including:
 - Physics-informed neural networks
 - Constrained RL for safety
 - Meta-learning capabilities
+- Device-agnostic operation (CPU/GPU/TPU)
 """
 
 import torch
@@ -23,6 +24,28 @@ from collections import deque
 import random
 import copy
 from enum import Enum
+
+# Import device management utilities
+try:
+    from ..utils.device_manager import DeviceManager, get_device_manager, to_device, to_numpy
+except ImportError:
+    # Fallback for when device manager is not available
+    class DeviceManager:
+        def __init__(self, device):
+            self.device = device
+            self.device_type = 'cpu' if device.type == 'cpu' else 'cuda'
+        
+        def to_device(self, tensor):
+            return tensor.to(self.device)
+        
+        def to_numpy(self, tensor):
+            if isinstance(tensor, np.ndarray):
+                return tensor
+            return tensor.detach().cpu().numpy()
+    
+    def get_device_manager(prefer_device='auto', enable_tpu=True):
+        device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+        return DeviceManager(device)
 
 class AlgorithmType(Enum):
     PPO = "ppo"
@@ -362,6 +385,13 @@ class HierarchicalAgent:
         # Optimizers
         self.high_level_optimizer = optim.Adam(self.high_level_policy.parameters(), lr=1e-4)
         self.low_level_optimizer = optim.Adam(self.low_level_policy.parameters(), lr=3e-4)
+    
+    def to(self, device):
+        """Move all networks to specified device"""
+        self.high_level_policy = self.high_level_policy.to(device)
+        self.low_level_policy = self.low_level_policy.to(device)
+        self.goal_embedding = self.goal_embedding.to(device)
+        return self
         
     def select_goal(self, state):
         """Select high-level goal based on current state"""
@@ -393,7 +423,29 @@ class MultiAlgorithmAgent:
         self.obs_dim = obs_dim
         self.action_dim = action_dim
         self.config = config
-        self.device = torch.device(config.get('device', 'cuda' if torch.cuda.is_available() else 'cpu'))
+        
+        # Initialize device manager for robust device handling
+        hardware_config = config.get('hardware', {})
+        device_config = hardware_config.get('device', {})
+        
+        if isinstance(device_config, str):
+            prefer_device = device_config
+            enable_tpu = True
+        else:
+            prefer_device = device_config.get('type', 'auto')
+            enable_tpu = device_config.get('enable_tpu', True)
+        
+        try:
+            self.device_manager = get_device_manager(prefer_device, enable_tpu)
+            self.device = self.device_manager.device
+        except Exception as e:
+            # Fallback to simple device selection
+            self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+            self.device_manager = DeviceManager(self.device)
+        
+        # Logging
+        self.logger = logging.getLogger(__name__)
+        self.logger.info(f"🤖 MultiAlgorithmAgent initialized on device: {self.device}")
         
         # Network configuration - filter to only include NetworkConfig fields
         network_config = config.get('network', {})
@@ -447,6 +499,7 @@ class MultiAlgorithmAgent:
         # Hierarchical agent
         if config.get('hierarchical_rl', {}).get('enabled', False):
             self.hierarchical_agent = HierarchicalAgent(obs_dim, action_dim, config)
+            self.hierarchical_agent = self.hierarchical_agent.to(self.device)
         else:
             self.hierarchical_agent = None
         
@@ -455,12 +508,14 @@ class MultiAlgorithmAgent:
             self.physics_loss = PhysicsInformedLoss(
                 config.get('physics_informed', {}).get('physics_loss_weight', 0.1)
             )
+            self.physics_loss = self.physics_loss.to(self.device)
         else:
             self.physics_loss = None
         
         # Safety layer
         if config.get('safety', {}).get('safety_layer', {}).get('enabled', False):
             self.safety_layer = SafetyLayer(action_dim, self.safety_constraints)
+            self.safety_layer = self.safety_layer.to(self.device)
         else:
             self.safety_layer = None
         
@@ -476,12 +531,54 @@ class MultiAlgorithmAgent:
         # Logging
         self.logger = logging.getLogger(__name__)
         
+    def to(self, device):
+        """Move all components to specified device with proper error handling"""
+        try:
+            self.device = device
+            self.device_manager.device = device
+            
+            # Move all algorithms to device
+            for alg_name, agent in self.algorithms.items():
+                try:
+                    if 'policy' in agent:
+                        agent['policy'] = agent['policy'].to(device)
+                    if 'q1' in agent:
+                        agent['q1'] = agent['q1'].to(device)
+                    if 'q2' in agent:
+                        agent['q2'] = agent['q2'].to(device)
+                    if 'target_q1' in agent:
+                        agent['target_q1'] = agent['target_q1'].to(device)
+                    if 'target_q2' in agent:
+                        agent['target_q2'] = agent['target_q2'].to(device)
+                    if 'target_policy' in agent:
+                        agent['target_policy'] = agent['target_policy'].to(device)
+                except Exception as e:
+                    self.logger.warning(f"Failed to move {alg_name} to {device}: {e}")
+            
+            # Move other components
+            if self.hierarchical_agent is not None:
+                self.hierarchical_agent = self.hierarchical_agent.to(device)
+            if self.physics_loss is not None:
+                self.physics_loss = self.physics_loss.to(device)
+            if self.safety_layer is not None:
+                self.safety_layer = self.safety_layer.to(device)
+                
+            self.logger.info(f"✅ MultiAlgorithmAgent moved to {device}")
+            return self
+            
+        except Exception as e:
+            self.logger.error(f"❌ Failed to move agent to {device}: {e}")
+            return self
+        
     def _create_ppo_agent(self):
         """Create PPO agent with transformer network"""
+        policy_net = TransformerPolicyNetwork(self.obs_dim, self.action_dim, self.network_config)
+        policy_net = policy_net.to(self.device)
+        
         return {
-            'policy': TransformerPolicyNetwork(self.obs_dim, self.action_dim, self.network_config),
+            'policy': policy_net,
             'optimizer': optim.Adam(
-                TransformerPolicyNetwork(self.obs_dim, self.action_dim, self.network_config).parameters(),
+                policy_net.parameters(),
                 lr=self.config.get('algorithms', {}).get('ppo', {}).get('learning_rate', 2.5e-4)
             ),
             'type': AlgorithmType.PPO
@@ -490,6 +587,7 @@ class MultiAlgorithmAgent:
     def _create_sac_agent(self):
         """Create SAC agent with transformer networks"""
         policy_net = TransformerPolicyNetwork(self.obs_dim, self.action_dim, self.network_config)
+        policy_net = policy_net.to(self.device)
         
         # Q-networks for SAC
         q1_net = nn.Sequential(
@@ -502,7 +600,7 @@ class MultiAlgorithmAgent:
             nn.LayerNorm(256),
             nn.Dropout(0.1),
             nn.Linear(256, 1)
-        )
+        ).to(self.device)
         
         q2_net = nn.Sequential(
             nn.Linear(self.obs_dim + self.action_dim, 512),
@@ -514,14 +612,14 @@ class MultiAlgorithmAgent:
             nn.LayerNorm(256),
             nn.Dropout(0.1),
             nn.Linear(256, 1)
-        )
+        ).to(self.device)
         
         return {
             'policy': policy_net,
             'q1': q1_net,
             'q2': q2_net,
-            'target_q1': copy.deepcopy(q1_net),
-            'target_q2': copy.deepcopy(q2_net),
+            'target_q1': copy.deepcopy(q1_net).to(self.device),
+            'target_q2': copy.deepcopy(q2_net).to(self.device),
             'optimizer_policy': optim.Adam(policy_net.parameters(), lr=3e-4),
             'optimizer_q1': optim.Adam(q1_net.parameters(), lr=3e-4),
             'optimizer_q2': optim.Adam(q2_net.parameters(), lr=3e-4),
@@ -542,7 +640,7 @@ class MultiAlgorithmAgent:
             nn.Dropout(0.1),
             nn.Linear(256, self.action_dim),
             nn.Tanh()
-        )
+        ).to(self.device)
         
         # Q-networks
         q1_net = nn.Sequential(
@@ -555,7 +653,7 @@ class MultiAlgorithmAgent:
             nn.LayerNorm(256),
             nn.Dropout(0.1),
             nn.Linear(256, 1)
-        )
+        ).to(self.device)
         
         q2_net = nn.Sequential(
             nn.Linear(self.obs_dim + self.action_dim, 512),
@@ -567,15 +665,15 @@ class MultiAlgorithmAgent:
             nn.LayerNorm(256),
             nn.Dropout(0.1),
             nn.Linear(256, 1)
-        )
+        ).to(self.device)
         
         return {
             'policy': policy_net,
             'q1': q1_net,
             'q2': q2_net,
-            'target_policy': copy.deepcopy(policy_net),
-            'target_q1': copy.deepcopy(q1_net),
-            'target_q2': copy.deepcopy(q2_net),
+            'target_policy': copy.deepcopy(policy_net).to(self.device),
+            'target_q1': copy.deepcopy(q1_net).to(self.device),
+            'target_q2': copy.deepcopy(q2_net).to(self.device),
             'optimizer_policy': optim.Adam(policy_net.parameters(), lr=3e-4),
             'optimizer_q1': optim.Adam(q1_net.parameters(), lr=3e-4),
             'optimizer_q2': optim.Adam(q2_net.parameters(), lr=3e-4),
@@ -594,6 +692,8 @@ class MultiAlgorithmAgent:
     
     def select_algorithm(self, performance_metrics: Optional[Dict] = None):
         """Select best algorithm based on recent performance"""
+        previous_algorithm = getattr(self, '_current_algorithm', None)
+        
         if self.selection_strategy == "dynamic":
             # Select based on recent performance
             best_algorithm = None
@@ -606,11 +706,11 @@ class MultiAlgorithmAgent:
                         best_performance = avg_performance
                         best_algorithm = alg_name
                         
-            return best_algorithm or 'ppo'  # Default to PPO
+            selected_algorithm = best_algorithm or 'ppo'  # Default to PPO
             
         elif self.selection_strategy == "voting":
             # Use ensemble voting
-            return "ensemble"
+            selected_algorithm = "ensemble"
             
         else:  # "best"
             # Always use the best performing algorithm overall
@@ -624,141 +724,192 @@ class MultiAlgorithmAgent:
                         best_performance = avg_performance
                         best_algorithm = alg_name
                         
-            return best_algorithm or 'ppo'
+            selected_algorithm = best_algorithm or 'ppo'
+        
+        # Track algorithm switches
+        if previous_algorithm is not None and previous_algorithm != selected_algorithm:
+            self.logger.info(f"🔄 Algorithm switch: {previous_algorithm} → {selected_algorithm}")
+            
+        self._current_algorithm = selected_algorithm
+        return selected_algorithm
     
     def get_action(self, state: torch.Tensor, deterministic: bool = False, 
                    algorithm: Optional[str] = None):
-        """Get action from the selected algorithm"""
+        """Get action from the selected algorithm with robust device handling"""
         
-        if algorithm is None:
-            algorithm = self.select_algorithm()
-        
-        state = state.to(self.device)
-        
-        if algorithm == "ensemble":
-            return self._get_ensemble_action(state, deterministic)
-        
-        # Use hierarchical agent if enabled
-        if self.hierarchical_agent is not None:
-            goal_idx = self.hierarchical_agent.select_goal(state)
-            mean, log_std, value = self.hierarchical_agent.get_action(state, goal_idx)
-            agent_type = AlgorithmType.PPO  # Default for hierarchical
-        else:
-            # Use selected algorithm
-            agent = self.algorithms[algorithm]
-            agent_type = agent['type']
+        try:
+            if algorithm is None:
+                algorithm = self.select_algorithm()
             
-            if agent_type == AlgorithmType.PPO or agent_type == AlgorithmType.SAC:
-                mean, log_std, value = agent['policy'](state)
-            else:  # TD3
-                mean = agent['policy'](state)
-                log_std = torch.zeros_like(mean)
-                value = None
-        
-        # Sample action
-        if deterministic:
-            action = mean
-        else:
-            if agent_type == AlgorithmType.TD3:
-                # Add exploration noise for TD3
-                noise = torch.randn_like(mean) * 0.1
-                action = mean + noise
+            # Ensure state is on correct device
+            state = self.device_manager.to_device(state)
+            
+            if algorithm == "ensemble":
+                return self._get_ensemble_action(state, deterministic)
+            
+            # Use hierarchical agent if enabled
+            if self.hierarchical_agent is not None:
+                goal_idx = self.hierarchical_agent.select_goal(state)
+                mean, log_std, value = self.hierarchical_agent.get_action(state, goal_idx)
+                agent_type = AlgorithmType.PPO  # Default for hierarchical
             else:
-                std = torch.exp(log_std)
-                dist = Normal(mean, std)
-                action = dist.sample()
-        
-        # Apply safety layer if enabled
-        if self.safety_layer is not None:
-            action = self.safety_layer(state, action)
-        
-        # Clamp action to valid range
-        action = torch.clamp(action, -1.0, 1.0)
-        
-        return action.detach().cpu().numpy(), {
-            'algorithm': algorithm,
-            'mean': mean.detach().cpu().numpy(),
-            'log_std': log_std.detach().cpu().numpy() if log_std is not None else None,
-            'value': value.detach().cpu().numpy() if value is not None else None
-        }
-    
-    def _get_ensemble_action(self, state: torch.Tensor, deterministic: bool = False):
-        """Get ensemble action by combining multiple algorithms"""
-        actions = []
-        weights = []
-        
-        for alg_name, agent in self.algorithms.items():
-            if agent['type'] == AlgorithmType.PPO or agent['type'] == AlgorithmType.SAC:
-                mean, log_std, _ = agent['policy'](state)
-                if deterministic:
-                    action = mean
+                # Use selected algorithm
+                if algorithm not in self.algorithms:
+                    self.logger.warning(f"Algorithm {algorithm} not available, falling back to first available")
+                    algorithm = list(self.algorithms.keys())[0]
+                
+                agent = self.algorithms[algorithm]
+                agent_type = agent['type']
+                
+                if agent_type == AlgorithmType.PPO or agent_type == AlgorithmType.SAC:
+                    mean, log_std, value = agent['policy'](state)
+                else:  # TD3
+                    mean = agent['policy'](state)
+                    log_std = torch.zeros_like(mean)
+                    value = None
+            
+            # Sample action
+            if deterministic:
+                action = mean
+            else:
+                if agent_type == AlgorithmType.TD3:
+                    # Add exploration noise for TD3
+                    noise = torch.randn_like(mean) * 0.1
+                    action = mean + noise
                 else:
-                    std = torch.exp(log_std)
+                    std = torch.exp(torch.clamp(log_std, -20, 2))  # Clamp for stability
                     dist = Normal(mean, std)
                     action = dist.sample()
-            else:  # TD3
-                action = agent['policy'](state)
-                if not deterministic:
-                    noise = torch.randn_like(action) * 0.1
-                    action = action + noise
             
-            actions.append(action)
-            weights.append(self.algorithm_weights[alg_name])
-        
-        # Weighted ensemble
-        weights = torch.tensor(weights, device=state.device)
-        weights = weights / weights.sum()
-        
-        ensemble_action = sum(w * action for w, action in zip(weights, actions))
-        
-        # Apply safety layer
-        if self.safety_layer is not None:
-            ensemble_action = self.safety_layer(state, ensemble_action)
-        
-        ensemble_action = torch.clamp(ensemble_action, -1.0, 1.0)
-        
-        return ensemble_action.cpu().numpy(), {
-            'algorithm': 'ensemble',
-            'weights': weights.cpu().numpy(),
-            'individual_actions': [a.cpu().numpy() for a in actions]
-        }
+            # Apply safety layer if enabled
+            if self.safety_layer is not None:
+                action = self.safety_layer(state, action)
+            
+            # Clamp action to valid range
+            action = torch.clamp(action, -1.0, 1.0)
+            
+            # Convert to numpy using device manager
+            action_numpy = self.device_manager.to_numpy(action)
+            
+            # Create info dict with safe conversions
+            info = {
+                'algorithm': algorithm,
+                'mean': self.device_manager.to_numpy(mean),
+                'log_std': self.device_manager.to_numpy(log_std) if log_std is not None else None,
+                'value': self.device_manager.to_numpy(value) if value is not None else None
+            }
+            
+            return action_numpy, info
+            
+        except Exception as e:
+            self.logger.error(f"Error in get_action: {e}")
+            # Emergency fallback - return random action
+            fallback_action = np.random.uniform(-1.0, 1.0, size=(self.action_dim,))
+            fallback_info = {'algorithm': 'fallback', 'error': str(e)}
+            return fallback_action, fallback_info
+    
+    def _get_ensemble_action(self, state: torch.Tensor, deterministic: bool = False):
+        """Get ensemble action by combining multiple algorithms with device management"""
+        try:
+            actions = []
+            weights = []
+            
+            for alg_name, agent in self.algorithms.items():
+                try:
+                    if agent['type'] == AlgorithmType.PPO or agent['type'] == AlgorithmType.SAC:
+                        mean, log_std, _ = agent['policy'](state)
+                        if deterministic:
+                            action = mean
+                        else:
+                            std = torch.exp(torch.clamp(log_std, -20, 2))
+                            dist = Normal(mean, std)
+                            action = dist.sample()
+                    else:  # TD3
+                        action = agent['policy'](state)
+                        if not deterministic:
+                            noise = torch.randn_like(action) * 0.1
+                            action = action + noise
+                    
+                    actions.append(action)
+                    weights.append(self.algorithm_weights.get(alg_name, 1.0))
+                    
+                except Exception as e:
+                    self.logger.warning(f"Failed to get action from {alg_name}: {e}")
+                    continue
+            
+            if not actions:
+                # Emergency fallback
+                fallback_action = torch.zeros(state.shape[0], self.action_dim, device=state.device)
+                return self.device_manager.to_numpy(fallback_action), {'algorithm': 'fallback', 'error': 'no_algorithms'}
+            
+            # Weighted ensemble
+            weights = torch.tensor(weights, device=state.device)
+            weights = weights / weights.sum()
+            
+            ensemble_action = sum(w * action for w, action in zip(weights, actions))
+            
+            # Apply safety layer
+            if self.safety_layer is not None:
+                ensemble_action = self.safety_layer(state, ensemble_action)
+            
+            ensemble_action = torch.clamp(ensemble_action, -1.0, 1.0)
+            
+            return self.device_manager.to_numpy(ensemble_action), {
+                'algorithm': 'ensemble',
+                'weights': self.device_manager.to_numpy(weights),
+                'individual_actions': [self.device_manager.to_numpy(a) for a in actions]
+            }
+            
+        except Exception as e:
+            self.logger.error(f"Error in ensemble action: {e}")
+            fallback_action = np.random.uniform(-1.0, 1.0, size=(self.action_dim,))
+            return fallback_action, {'algorithm': 'fallback', 'error': str(e)}
     
     def update(self, batch: Dict, algorithm: Optional[str] = None):
-        """Update the selected algorithm"""
-        if algorithm is None:
-            algorithm = self.select_algorithm()
-        
-        # Move batch to device
-        batch = {k: v.to(self.device) if isinstance(v, torch.Tensor) else v 
-                for k, v in batch.items()}
-        
-        # Apply physics-informed loss if enabled
-        physics_loss = 0.0
-        if self.physics_loss is not None:
-            physics_loss, physics_losses = self.physics_loss(
-                batch['states'], batch['actions'], batch['next_states']
-            )
-        
-        # Update the selected algorithm
-        if algorithm == 'ppo':
-            losses = self._update_ppo(batch)
-        elif algorithm == 'sac':
-            losses = self._update_sac(batch)
-        elif algorithm == 'td3':
-            losses = self._update_td3(batch)
-        else:
-            losses = {}
-        
-        # Add physics loss
-        if physics_loss > 0:
-            losses['physics_loss'] = physics_loss.item()
-            # Add physics loss to policy loss (assuming it exists)
-            if 'policy_loss' in losses:
-                total_policy_loss = losses['policy_loss'] + physics_loss
-                # Re-run backward pass with combined loss
-                # This is a simplified version - in practice, you'd integrate this into the specific update methods
-        
-        return losses
+        """Update the selected algorithm with robust device handling"""
+        try:
+            if algorithm is None:
+                algorithm = self.select_algorithm()
+            
+            # Move batch to device using device manager
+            device_batch = {}
+            for k, v in batch.items():
+                if isinstance(v, torch.Tensor):
+                    device_batch[k] = self.device_manager.to_device(v)
+                else:
+                    device_batch[k] = v
+            
+            # Apply physics-informed loss if enabled
+            physics_loss = 0.0
+            if self.physics_loss is not None:
+                try:
+                    physics_loss, physics_losses = self.physics_loss(
+                        device_batch['states'], device_batch['actions'], device_batch['next_states']
+                    )
+                except Exception as e:
+                    self.logger.warning(f"Physics loss computation failed: {e}")
+                    physics_loss = 0.0
+            
+            # Update the selected algorithm
+            if algorithm == 'ppo' and 'ppo' in self.algorithms:
+                losses = self._update_ppo(device_batch)
+            elif algorithm == 'sac' and 'sac' in self.algorithms:
+                losses = self._update_sac(device_batch)
+            elif algorithm == 'td3' and 'td3' in self.algorithms:
+                losses = self._update_td3(device_batch)
+            else:
+                self.logger.warning(f"Algorithm {algorithm} not available for update")
+                losses = {}
+            
+            # Add physics loss
+            if physics_loss > 0:
+                losses['physics_loss'] = physics_loss.item() if isinstance(physics_loss, torch.Tensor) else physics_loss
+            
+            return losses
+            
+        except Exception as e:
+            self.logger.error(f"Error in agent update: {e}")
+            return {'error': str(e)}
     
     def _update_ppo(self, batch: Dict):
         """Update PPO algorithm"""
