@@ -709,19 +709,46 @@ def main():
     
     args = parser.parse_args()
     
+    # Get the project root directory (parent of scripts directory)
+    script_dir = Path(__file__).parent
+    project_root = script_dir.parent
+    
+    # Handle config path - try relative to project root first, then absolute
+    config_path = args.config
+    if not os.path.isabs(config_path):
+        # Try relative to project root
+        config_path = project_root / config_path
+        if not config_path.exists():
+            # Try relative to current working directory
+            config_path = Path(args.config)
+            if not config_path.exists():
+                # Try relative to script directory
+                config_path = script_dir / args.config
+    
     # Verify config file exists
-    if not os.path.exists(args.config):
+    if not config_path.exists():
         print(f"Configuration file not found: {args.config}")
+        print(f"Searched in:")
+        print(f"  - {project_root / args.config}")
+        print(f"  - {Path(args.config).absolute()}")
+        print(f"  - {script_dir / args.config}")
         print("Available configs:")
-        config_dir = Path('config')
-        if config_dir.exists():
-            for config_file in config_dir.glob('*.yaml'):
-                print(f"  - {config_file}")
+        
+        # Look for config directories in multiple locations
+        for search_dir in [project_root, Path.cwd(), script_dir]:
+            config_dir = search_dir / 'config'
+            if config_dir.exists():
+                print(f"  In {config_dir}:")
+                for config_file in config_dir.glob('*.yaml'):
+                    print(f"    - {config_file}")
         return
+    
+    # Convert to string for the trainer
+    config_path = str(config_path)
     
     # Create trainer
     try:
-        trainer = StateOfTheArtTrainer(args.config, debug=args.debug)
+        trainer = StateOfTheArtTrainer(config_path, debug=args.debug)
         
         # Resume from checkpoint if specified
         if args.resume:
