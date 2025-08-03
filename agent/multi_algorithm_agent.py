@@ -33,7 +33,7 @@ class AlgorithmType(Enum):
 @dataclass
 class NetworkConfig:
     """Configuration for neural network architectures"""
-    hidden_dims: List[int] = field(default_factory=lambda: [512, 512, 256])
+    architecture_type: str = "transformer"  # transformer, cnn, mlp, hybrid
     activation: str = "gelu"
     use_layer_norm: bool = True
     use_spectral_norm: bool = True
@@ -50,6 +50,9 @@ class NetworkConfig:
     use_attention: bool = True
     use_residual: bool = True
     use_squeeze_excitation: bool = True
+    
+    # Fields with default_factory must come last
+    hidden_dims: List[int] = field(default_factory=lambda: [512, 512, 256])
 
 @dataclass
 class SafetyConstraints:
@@ -392,11 +395,37 @@ class MultiAlgorithmAgent:
         self.config = config
         self.device = torch.device(config.get('device', 'cuda' if torch.cuda.is_available() else 'cpu'))
         
-        # Network configuration
-        self.network_config = NetworkConfig(**config.get('network', {}))
+        # Network configuration - filter to only include NetworkConfig fields
+        network_config = config.get('network', {})
+        network_fields = {
+            'architecture_type': network_config.get('architecture_type', 'transformer'),
+            'activation': network_config.get('mlp_backbone', {}).get('activation', 'gelu'),
+            'use_layer_norm': network_config.get('mlp_backbone', {}).get('layer_norm', True),
+            'use_spectral_norm': network_config.get('mlp_backbone', {}).get('spectral_norm', True),
+            'dropout': network_config.get('transformer', {}).get('dropout', 0.1),
+            'use_transformer': network_config.get('transformer', {}).get('enabled', True),
+            'd_model': network_config.get('transformer', {}).get('d_model', 256),
+            'nhead': network_config.get('transformer', {}).get('nhead', 8),
+            'num_transformer_layers': network_config.get('transformer', {}).get('num_layers', 4),
+            'dim_feedforward': network_config.get('transformer', {}).get('dim_feedforward', 512),
+            'use_attention': network_config.get('advanced_features', {}).get('use_attention', True),
+            'use_residual': network_config.get('advanced_features', {}).get('use_residual_connections', True),
+            'use_squeeze_excitation': False,  # Default
+            'hidden_dims': network_config.get('mlp_backbone', {}).get('hidden_dims', [512, 512, 256])
+        }
+        self.network_config = NetworkConfig(**network_fields)
         
-        # Safety constraints
-        self.safety_constraints = SafetyConstraints(**config.get('safety', {}))
+        # Safety constraints - filter to only include SafetyConstraints fields
+        safety_config = config.get('safety', {})
+        safety_fields = {
+            'max_tilt': safety_config.get('constrained_rl', {}).get('constraints', {}).get('max_tilt', 0.52),
+            'max_angular_velocity': safety_config.get('constrained_rl', {}).get('constraints', {}).get('max_angular_velocity', 5.0),
+            'min_altitude': safety_config.get('constrained_rl', {}).get('constraints', {}).get('min_altitude', 0.1),
+            'max_altitude': safety_config.get('constrained_rl', {}).get('constraints', {}).get('max_altitude', 20.0),
+            'max_control_effort': 1.0,  # Default
+            'fuel_reserve': safety_config.get('constrained_rl', {}).get('constraints', {}).get('fuel_reserve', 0.1)
+        }
+        self.safety_constraints = SafetyConstraints(**safety_fields)
         
         # Initialize algorithms
         self.algorithms = {}
@@ -613,11 +642,13 @@ class MultiAlgorithmAgent:
         if self.hierarchical_agent is not None:
             goal_idx = self.hierarchical_agent.select_goal(state)
             mean, log_std, value = self.hierarchical_agent.get_action(state, goal_idx)
+            agent_type = AlgorithmType.PPO  # Default for hierarchical
         else:
             # Use selected algorithm
             agent = self.algorithms[algorithm]
+            agent_type = agent['type']
             
-            if agent['type'] == AlgorithmType.PPO or agent['type'] == AlgorithmType.SAC:
+            if agent_type == AlgorithmType.PPO or agent_type == AlgorithmType.SAC:
                 mean, log_std, value = agent['policy'](state)
             else:  # TD3
                 mean = agent['policy'](state)
@@ -628,7 +659,7 @@ class MultiAlgorithmAgent:
         if deterministic:
             action = mean
         else:
-            if agent['type'] == AlgorithmType.TD3:
+            if agent_type == AlgorithmType.TD3:
                 # Add exploration noise for TD3
                 noise = torch.randn_like(mean) * 0.1
                 action = mean + noise
@@ -644,11 +675,11 @@ class MultiAlgorithmAgent:
         # Clamp action to valid range
         action = torch.clamp(action, -1.0, 1.0)
         
-        return action.cpu().numpy(), {
+        return action.detach().cpu().numpy(), {
             'algorithm': algorithm,
-            'mean': mean.cpu().numpy(),
-            'log_std': log_std.cpu().numpy() if log_std is not None else None,
-            'value': value.cpu().numpy() if value is not None else None
+            'mean': mean.detach().cpu().numpy(),
+            'log_std': log_std.detach().cpu().numpy() if log_std is not None else None,
+            'value': value.detach().cpu().numpy() if value is not None else None
         }
     
     def _get_ensemble_action(self, state: torch.Tensor, deterministic: bool = False):
