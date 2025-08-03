@@ -13,12 +13,22 @@
 # limitations under the License.
 
 """
-Agent Module Initialization
+Agent Module Initialization - State-of-the-Art
 
-This module provides easy access to SAC agent components and utilities
-for rocket TVC control applications.
+This module provides easy access to the state-of-the-art multi-algorithm agent
+and related components for rocket TVC control applications.
 """
 
-from .sac_agent import SACAgent, SACConfig, ReplayBuffer
+from .multi_algorithm_agent import (
+    MultiAlgorithmAgent,
+    TransformerPolicyNetwork,
+    HierarchicalAgent,
+    SafetyLayer
+)
 
-__all__ = ["SACAgent", "SACConfig", "ReplayBuffer"]
+__all__ = [
+    "MultiAlgorithmAgent",
+    "TransformerPolicyNetwork", 
+    "HierarchicalAgent",
+    "SafetyLayer"
+]
