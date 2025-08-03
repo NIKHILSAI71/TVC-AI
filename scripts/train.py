@@ -39,7 +39,7 @@ sys.path.append(str(Path(__file__).parent.parent))
 # Import our state-of-the-art components
 from env.enhanced_rocket_tvc_env import EnhancedRocketTVCEnv, MissionPhase
 from agent.multi_algorithm_agent import MultiAlgorithmAgent
-from scripts.curriculum_manager import AdaptiveCurriculumManager
+from scripts.curriculum_manager import CurriculumManager
 
 @dataclass
 class TrainingMetrics:
@@ -266,7 +266,7 @@ class StateOfTheArtTrainer:
         
         # Curriculum manager
         if self.config.get('curriculum', {}).get('enabled', False):
-            self.curriculum_manager = AdaptiveCurriculumManager(
+            self.curriculum_manager = CurriculumManager(
                 self.config.get('curriculum', {}),
                 self.env
             )
