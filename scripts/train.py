@@ -17,6 +17,7 @@ This is the complete integration file that brings together:
 import sys
 import os
 import yaml
+import os
 import torch
 import numpy as np
 import gymnasium as gym
@@ -32,6 +33,9 @@ from dataclasses import dataclass
 import json
 import warnings
 warnings.filterwarnings('ignore')
+
+# Set wandb to offline mode to avoid interactive prompts
+os.environ['WANDB_MODE'] = 'offline'
 
 # Add project root to path
 sys.path.append(str(Path(__file__).parent.parent))
@@ -187,17 +191,35 @@ class StateOfTheArtTrainer:
         
     def setup_logging(self):
         """Setup comprehensive logging with W&B integration"""
-        # Create output directory
-        output_dir = Path(self.config['globals']['output_dir'])
+        # Create timestamped output directory
+        base_output_dir = Path(self.config['globals']['output_dir'])
+        timestamp = datetime.now().strftime('%Y-%m-%d/%H-%M-%S')
+        output_dir = base_output_dir / timestamp
         output_dir.mkdir(parents=True, exist_ok=True)
         
-        # Configure logging
+        # Update config with actual output directory
+        self.config['globals']['actual_output_dir'] = str(output_dir)
+        
+        # Configure logging with UTF-8 encoding for Windows compatibility
         log_level = getattr(logging, self.config.get('logging', {}).get('level', 'INFO'))
+        
+        # Setup UTF-8 encoding for Windows console
+        import sys
+        if sys.platform.startswith('win'):
+            try:
+                sys.stdout.reconfigure(encoding='utf-8')
+                sys.stderr.reconfigure(encoding='utf-8')
+            except AttributeError:
+                # Fallback for older Python versions
+                import codecs
+                sys.stdout = codecs.getwriter('utf-8')(sys.stdout.buffer)
+                sys.stderr = codecs.getwriter('utf-8')(sys.stderr.buffer)
+        
         logging.basicConfig(
             level=log_level,
             format='%(asctime)s [%(levelname)s] %(name)s: %(message)s',
             handlers=[
-                logging.FileHandler(output_dir / 'sota_training.log'),
+                logging.FileHandler(output_dir / 'sota_training.log', encoding='utf-8'),
                 logging.StreamHandler()
             ]
         )
@@ -268,7 +290,7 @@ class StateOfTheArtTrainer:
         if self.config.get('curriculum', {}).get('enabled', False):
             self.curriculum_manager = CurriculumManager(
                 self.config.get('curriculum', {}),
-                self.env
+                self.logger
             )
             self.logger.info("Adaptive curriculum learning enabled")
         else:
@@ -284,17 +306,17 @@ class StateOfTheArtTrainer:
         
     def train(self):
         """Main state-of-the-art training loop"""
-        self.logger.info("🚀 Starting State-of-the-Art TVC Training!")
+        self.logger.info(">>> Starting State-of-the-Art TVC Training!")
         self.logger.info("="*80)
         self.logger.info("Features enabled:")
-        self.logger.info("  ✓ Multi-algorithm ensemble (PPO+SAC+TD3)")
-        self.logger.info("  ✓ Transformer-based policy networks")
-        self.logger.info("  ✓ Hierarchical RL with skill discovery")
-        self.logger.info("  ✓ Physics-informed neural networks")
-        self.logger.info("  ✓ Curiosity-driven exploration")
-        self.logger.info("  ✓ Adaptive curriculum learning")
-        self.logger.info("  ✓ Real-time reward hacking detection")
-        self.logger.info("  ✓ Mission success detection with real landing criteria")
+        self.logger.info("  [X] Multi-algorithm ensemble (PPO+SAC+TD3)")
+        self.logger.info("  [X] Transformer-based policy networks")
+        self.logger.info("  [X] Hierarchical RL with skill discovery")
+        self.logger.info("  [X] Physics-informed neural networks")
+        self.logger.info("  [X] Curiosity-driven exploration")
+        self.logger.info("  [X] Adaptive curriculum learning")
+        self.logger.info("  [X] Real-time reward hacking detection")
+        self.logger.info("  [X] Mission success detection with real landing criteria")
         self.logger.info("="*80)
         
         episode_rewards = deque(maxlen=100)
@@ -340,14 +362,14 @@ class StateOfTheArtTrainer:
                     self.best_success_rate = eval_results['success_rate']
                     self.no_improvement_steps = 0
                     self.save_checkpoint('best_model.pth')
-                    self.logger.info(f"🎯 New best success rate: {self.best_success_rate:.1%}")
+                    self.logger.info(f">>> New best success rate: {self.best_success_rate:.1%}")
                 else:
                     self.no_improvement_steps += self.eval_freq
                 
                 # Early stopping check
                 if (self.early_stopping_enabled and 
                     self.no_improvement_steps >= self.early_stopping_patience):
-                    self.logger.info(f"⏹️  Early stopping triggered after {self.no_improvement_steps} steps without improvement")
+                    self.logger.info(f">>> Early stopping triggered after {self.no_improvement_steps} steps without improvement")
                     break
             
             # Save periodic checkpoint
@@ -360,7 +382,7 @@ class StateOfTheArtTrainer:
                 self.metrics.hacking_scores.append(hacking_info['hacking_score'])
                 
                 if hacking_info['hacking_score'] > 0.7:
-                    self.logger.warning(f"⚠️  Potential reward hacking detected! Score: {hacking_info['hacking_score']:.3f}")
+                    self.logger.warning(f"!!! Potential reward hacking detected! Score: {hacking_info['hacking_score']:.3f}")
                     self.logger.warning(f"Indicators: {hacking_info['indicators']}")
                     
                     # Log to wandb if enabled
@@ -374,7 +396,7 @@ class StateOfTheArtTrainer:
             self.current_episode += 1
         
         # Final evaluation
-        self.logger.info("🏁 Training completed. Running final evaluation...")
+        self.logger.info(">>> Training completed. Running final evaluation...")
         final_eval = self.evaluate(episodes=50)
         self.log_evaluation_results(final_eval, final=True)
         
@@ -398,7 +420,7 @@ class StateOfTheArtTrainer:
         while True:
             # Get action from ensemble
             action, action_info = self.agent.get_action(torch.FloatTensor(obs).unsqueeze(0))
-            action = action[0].cpu().numpy()  # Remove batch dimension
+            action = action[0]  # Remove batch dimension - already numpy
             
             # Step environment
             next_obs, reward, terminated, truncated, step_info = self.env.step(action)
@@ -411,11 +433,23 @@ class StateOfTheArtTrainer:
             
             # Update agent
             if self.total_timesteps >= 1000:  # Start training after warmup
-                losses = self.agent.update(obs, action, reward, next_obs, terminated or truncated)
-                
-                # Log losses periodically
-                if wandb.run is not None and self.total_timesteps % 100 == 0:
-                    wandb.log({f'losses/{k}': v for k, v in losses.items()}, step=self.total_timesteps)
+                try:
+                    # Create batch dictionary for agent update
+                    batch = {
+                        'states': torch.FloatTensor(obs).unsqueeze(0).to(self.agent.device),
+                        'actions': torch.FloatTensor(action).unsqueeze(0).to(self.agent.device),
+                        'rewards': torch.FloatTensor([reward]).to(self.agent.device),
+                        'next_states': torch.FloatTensor(next_obs).unsqueeze(0).to(self.agent.device),
+                        'dones': torch.BoolTensor([terminated or truncated]).to(self.agent.device)
+                    }
+                    losses = self.agent.update(batch)
+                    
+                    # Log losses periodically
+                    if wandb.run is not None and self.total_timesteps % 100 == 0:
+                        wandb.log({f'losses/{k}': v for k, v in losses.items()}, step=self.total_timesteps)
+                except Exception as e:
+                    self.logger.warning(f"Agent update failed: {e}. Skipping this update step.")
+                    losses = {}
             
             # Update metrics
             episode_reward += reward
@@ -528,7 +562,7 @@ class StateOfTheArtTrainer:
         
         # Get latest reward hacking score
         hacking_info = self.reward_hacking_detector.detect_hacking()
-        hacking_status = "🟢 SAFE" if hacking_info['hacking_score'] < 0.3 else "🟡 CAUTION" if hacking_info['hacking_score'] < 0.7 else "🔴 DANGER"
+        hacking_status = "[SAFE]" if hacking_info['hacking_score'] < 0.3 else "[CAUTION]" if hacking_info['hacking_score'] < 0.7 else "[DANGER]"
         
         self.logger.info(
             f"Episode {self.current_episode:>5}, Step {self.total_timesteps:>8,} | "
@@ -550,18 +584,18 @@ class StateOfTheArtTrainer:
                 'training/episode_length': recent_length,
                 'training/steps_per_second': steps_per_second,
                 'training/hacking_score': hacking_info['hacking_score'],
-                'curriculum/stage': self.curriculum_manager.current_stage if self.curriculum_manager else 0
+                'curriculum/stage': self.curriculum_manager.get_current_stage().name if self.curriculum_manager and self.curriculum_manager.get_current_stage() else 'none'
             }, step=self.total_timesteps)
     
     def log_evaluation_results(self, eval_results: Dict[str, float], final: bool = False):
         """Log comprehensive evaluation results"""
-        prefix = "🏆 FINAL" if final else "📊 EVAL"
+        prefix = ">>> FINAL" if final else ">>> EVAL"
         
         self.logger.info(f"{prefix} Evaluation Results:")
-        self.logger.info(f"  🎯 Success Rate: {eval_results['success_rate']:>6.1%}")
-        self.logger.info(f"  💰 Reward: {eval_results['reward_mean']:>10.2f} ± {eval_results['reward_std']:>6.2f}")
-        self.logger.info(f"  ⏱️  Episode Length: {eval_results['length_mean']:>7.0f} ± {eval_results['length_std']:>5.0f}")
-        self.logger.info(f"  ⚠️  Safety Violations: {eval_results['safety_violation_rate']:>5.1%}")
+        self.logger.info(f"  Success Rate: {eval_results['success_rate']:>6.1%}")
+        self.logger.info(f"  Reward: {eval_results['reward_mean']:>10.2f} ± {eval_results['reward_std']:>6.2f}")
+        self.logger.info(f"  Episode Length: {eval_results['length_mean']:>7.0f} ± {eval_results['length_std']:>5.0f}")
+        self.logger.info(f"  Safety Violations: {eval_results['safety_violation_rate']:>5.1%}")
         
         # Log to wandb
         if wandb.run is not None:
@@ -579,21 +613,21 @@ class StateOfTheArtTrainer:
         total_time = time.time() - self.training_start_time
         
         self.logger.info("="*80)
-        self.logger.info("🎉 TRAINING COMPLETED!")
+        self.logger.info(">>> TRAINING COMPLETED!")
         self.logger.info("="*80)
-        self.logger.info(f"📈 Total Episodes: {self.current_episode:,}")
-        self.logger.info(f"👣 Total Timesteps: {self.total_timesteps:,}")
-        self.logger.info(f"⏰ Training Time: {total_time/3600:.2f} hours")
-        self.logger.info(f"🏆 Best Success Rate: {self.best_success_rate:.1%}")
+        self.logger.info(f"Total Episodes: {self.current_episode:,}")
+        self.logger.info(f"Total Timesteps: {self.total_timesteps:,}")
+        self.logger.info(f"Training Time: {total_time/3600:.2f} hours")
+        self.logger.info(f"Best Success Rate: {self.best_success_rate:.1%}")
         
         if len(self.metrics.episode_rewards) > 0:
-            self.logger.info(f"💰 Final Reward: {np.mean(self.metrics.episode_rewards[-100:]):.2f}")
+            self.logger.info(f"Final Reward: {np.mean(self.metrics.episode_rewards[-100:]):.2f}")
             if len(self.metrics.episode_rewards) >= 200:
                 improvement = np.mean(self.metrics.episode_rewards[-100:]) - np.mean(self.metrics.episode_rewards[:100])
-                self.logger.info(f"📊 Reward Improvement: {improvement:.2f}")
+                self.logger.info(f"Reward Improvement: {improvement:.2f}")
         
         # Algorithm performance summary
-        self.logger.info("🤖 Algorithm Performance:")
+        self.logger.info("Algorithm Performance:")
         for alg_name, performance in self.agent.performance_history.items():
             if len(performance) > 0:
                 avg_perf = np.mean(list(performance))
@@ -601,8 +635,8 @@ class StateOfTheArtTrainer:
         
         # Reward hacking summary
         final_hacking_info = self.reward_hacking_detector.detect_hacking()
-        hacking_status = "✅ CLEAN" if final_hacking_info['hacking_score'] < 0.3 else "⚠️ SUSPICIOUS"
-        self.logger.info(f"🔍 Final Reward Hacking Status: {hacking_status} (Score: {final_hacking_info['hacking_score']:.3f})")
+        hacking_status = "[CLEAN]" if final_hacking_info['hacking_score'] < 0.3 else "[SUSPICIOUS]"
+        self.logger.info(f"Final Reward Hacking Status: {hacking_status} (Score: {final_hacking_info['hacking_score']:.3f})")
         
         # Save metrics
         self.save_training_metrics()
@@ -610,7 +644,7 @@ class StateOfTheArtTrainer:
     
     def save_training_metrics(self):
         """Save comprehensive training metrics"""
-        output_dir = Path(self.config['globals']['output_dir'])
+        output_dir = Path(self.config['globals']['actual_output_dir'])
         metrics_file = output_dir / 'sota_training_metrics.json'
         
         metrics_dict = {
@@ -634,11 +668,11 @@ class StateOfTheArtTrainer:
         with open(metrics_file, 'w') as f:
             json.dump(metrics_dict, f, indent=2)
         
-        self.logger.info(f"📁 Training metrics saved to {metrics_file}")
+        self.logger.info(f"Training metrics saved to {metrics_file}")
     
     def save_checkpoint(self, filename: str):
         """Save comprehensive training checkpoint"""
-        output_dir = Path(self.config['globals']['output_dir'])
+        output_dir = Path(self.config['globals']['actual_output_dir'])
         models_dir = output_dir / 'models'
         models_dir.mkdir(exist_ok=True)
         
@@ -651,7 +685,7 @@ class StateOfTheArtTrainer:
             'total_timesteps': self.total_timesteps,
             'best_success_rate': self.best_success_rate,
             'no_improvement_steps': self.no_improvement_steps,
-            'curriculum_stage': self.curriculum_manager.current_stage if self.curriculum_manager else 0,
+            'curriculum_stage': self.curriculum_manager.get_current_stage().name if self.curriculum_manager and self.curriculum_manager.get_current_stage() else 'none',
             'metrics': {
                 'episode_rewards': self.metrics.episode_rewards,
                 'episode_lengths': self.metrics.episode_lengths,
@@ -677,7 +711,7 @@ def main():
     
     # Verify config file exists
     if not os.path.exists(args.config):
-        print(f"❌ Configuration file not found: {args.config}")
+        print(f"Configuration file not found: {args.config}")
         print("Available configs:")
         config_dir = Path('config')
         if config_dir.exists():
@@ -691,19 +725,19 @@ def main():
         
         # Resume from checkpoint if specified
         if args.resume:
-            trainer.logger.info(f"🔄 Resuming training from {args.resume}")
+            trainer.logger.info(f"Resuming training from {args.resume}")
             # Resume logic would go here
         
         # Start training
         trainer.train()
         
     except KeyboardInterrupt:
-        trainer.logger.info("⏹️  Training interrupted by user")
+        trainer.logger.info("Training interrupted by user")
         trainer.save_checkpoint('interrupted_model.pth')
         
     except Exception as e:
         if 'trainer' in locals():
-            trainer.logger.error(f"💥 Training failed with error: {e}")
+            trainer.logger.error(f"Training failed with error: {e}")
             trainer.save_checkpoint('error_model.pth')
         raise
     
