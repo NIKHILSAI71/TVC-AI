@@ -362,6 +362,13 @@ class HierarchicalAgent:
         # Optimizers
         self.high_level_optimizer = optim.Adam(self.high_level_policy.parameters(), lr=1e-4)
         self.low_level_optimizer = optim.Adam(self.low_level_policy.parameters(), lr=3e-4)
+    
+    def to(self, device):
+        """Move all networks to specified device"""
+        self.high_level_policy = self.high_level_policy.to(device)
+        self.low_level_policy = self.low_level_policy.to(device)
+        self.goal_embedding = self.goal_embedding.to(device)
+        return self
         
     def select_goal(self, state):
         """Select high-level goal based on current state"""
@@ -447,6 +454,7 @@ class MultiAlgorithmAgent:
         # Hierarchical agent
         if config.get('hierarchical_rl', {}).get('enabled', False):
             self.hierarchical_agent = HierarchicalAgent(obs_dim, action_dim, config)
+            self.hierarchical_agent = self.hierarchical_agent.to(self.device)
         else:
             self.hierarchical_agent = None
         
@@ -455,12 +463,14 @@ class MultiAlgorithmAgent:
             self.physics_loss = PhysicsInformedLoss(
                 config.get('physics_informed', {}).get('physics_loss_weight', 0.1)
             )
+            self.physics_loss = self.physics_loss.to(self.device)
         else:
             self.physics_loss = None
         
         # Safety layer
         if config.get('safety', {}).get('safety_layer', {}).get('enabled', False):
             self.safety_layer = SafetyLayer(action_dim, self.safety_constraints)
+            self.safety_layer = self.safety_layer.to(self.device)
         else:
             self.safety_layer = None
         
@@ -478,10 +488,13 @@ class MultiAlgorithmAgent:
         
     def _create_ppo_agent(self):
         """Create PPO agent with transformer network"""
+        policy_net = TransformerPolicyNetwork(self.obs_dim, self.action_dim, self.network_config)
+        policy_net = policy_net.to(self.device)
+        
         return {
-            'policy': TransformerPolicyNetwork(self.obs_dim, self.action_dim, self.network_config),
+            'policy': policy_net,
             'optimizer': optim.Adam(
-                TransformerPolicyNetwork(self.obs_dim, self.action_dim, self.network_config).parameters(),
+                policy_net.parameters(),
                 lr=self.config.get('algorithms', {}).get('ppo', {}).get('learning_rate', 2.5e-4)
             ),
             'type': AlgorithmType.PPO
@@ -490,6 +503,7 @@ class MultiAlgorithmAgent:
     def _create_sac_agent(self):
         """Create SAC agent with transformer networks"""
         policy_net = TransformerPolicyNetwork(self.obs_dim, self.action_dim, self.network_config)
+        policy_net = policy_net.to(self.device)
         
         # Q-networks for SAC
         q1_net = nn.Sequential(
@@ -502,7 +516,7 @@ class MultiAlgorithmAgent:
             nn.LayerNorm(256),
             nn.Dropout(0.1),
             nn.Linear(256, 1)
-        )
+        ).to(self.device)
         
         q2_net = nn.Sequential(
             nn.Linear(self.obs_dim + self.action_dim, 512),
@@ -514,14 +528,14 @@ class MultiAlgorithmAgent:
             nn.LayerNorm(256),
             nn.Dropout(0.1),
             nn.Linear(256, 1)
-        )
+        ).to(self.device)
         
         return {
             'policy': policy_net,
             'q1': q1_net,
             'q2': q2_net,
-            'target_q1': copy.deepcopy(q1_net),
-            'target_q2': copy.deepcopy(q2_net),
+            'target_q1': copy.deepcopy(q1_net).to(self.device),
+            'target_q2': copy.deepcopy(q2_net).to(self.device),
             'optimizer_policy': optim.Adam(policy_net.parameters(), lr=3e-4),
             'optimizer_q1': optim.Adam(q1_net.parameters(), lr=3e-4),
             'optimizer_q2': optim.Adam(q2_net.parameters(), lr=3e-4),
@@ -542,7 +556,7 @@ class MultiAlgorithmAgent:
             nn.Dropout(0.1),
             nn.Linear(256, self.action_dim),
             nn.Tanh()
-        )
+        ).to(self.device)
         
         # Q-networks
         q1_net = nn.Sequential(
@@ -555,7 +569,7 @@ class MultiAlgorithmAgent:
             nn.LayerNorm(256),
             nn.Dropout(0.1),
             nn.Linear(256, 1)
-        )
+        ).to(self.device)
         
         q2_net = nn.Sequential(
             nn.Linear(self.obs_dim + self.action_dim, 512),
@@ -567,15 +581,15 @@ class MultiAlgorithmAgent:
             nn.LayerNorm(256),
             nn.Dropout(0.1),
             nn.Linear(256, 1)
-        )
+        ).to(self.device)
         
         return {
             'policy': policy_net,
             'q1': q1_net,
             'q2': q2_net,
-            'target_policy': copy.deepcopy(policy_net),
-            'target_q1': copy.deepcopy(q1_net),
-            'target_q2': copy.deepcopy(q2_net),
+            'target_policy': copy.deepcopy(policy_net).to(self.device),
+            'target_q1': copy.deepcopy(q1_net).to(self.device),
+            'target_q2': copy.deepcopy(q2_net).to(self.device),
             'optimizer_policy': optim.Adam(policy_net.parameters(), lr=3e-4),
             'optimizer_q1': optim.Adam(q1_net.parameters(), lr=3e-4),
             'optimizer_q2': optim.Adam(q2_net.parameters(), lr=3e-4),
