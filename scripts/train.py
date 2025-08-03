@@ -101,7 +101,14 @@ class RewardHackingDetector:
     def detect_hacking(self) -> Dict[str, float]:
         """Detect potential reward hacking with multiple indicators"""
         if len(self.reward_history) < 50:
-            return {'hacking_score': 0.0, 'confidence': 0.0}
+            return {
+                'hacking_score': 0.0, 
+                'confidence': 0.0,
+                'indicators': {},
+                'mean_reward': 0.0,
+                'success_rate': 0.0,
+                'mean_episode_length': 0.0
+            }
         
         rewards = np.array(list(self.reward_history))
         successes = np.array(list(self.success_history))
@@ -487,24 +494,25 @@ class StateOfTheArtTrainer:
             # Check for reward hacking
             if self.current_episode % 50 == 0:
                 hacking_info = self.reward_hacking_detector.detect_hacking()
-                self.metrics.hacking_scores.append(hacking_info['hacking_score'])
+                self.metrics.hacking_scores.append(hacking_info.get('hacking_score', 0.0))
                 
-                # Log with comprehensive logger
+                # Log with comprehensive logger (with safe key access)
+                indicators = hacking_info.get('indicators', {})
                 self.comprehensive_logger.log_reward_hacking_detection(
-                    hacking_info['hacking_score'],
-                    hacking_info['indicators']
+                    hacking_info.get('hacking_score', 0.0),
+                    indicators
                 )
                 
-                if hacking_info['hacking_score'] > 0.7:
-                    self.logger.warning(f"!!! Potential reward hacking detected! Score: {hacking_info['hacking_score']:.3f}")
-                    self.logger.warning(f"Indicators: {hacking_info['indicators']}")
+                if hacking_info.get('hacking_score', 0.0) > 0.7:
+                    self.logger.warning(f"!!! Potential reward hacking detected! Score: {hacking_info.get('hacking_score', 0.0):.3f}")
+                    self.logger.warning(f"Indicators: {indicators}")
                     
                     # Log to wandb if enabled
                     if wandb.run is not None:
                         wandb.log({
-                            'reward_hacking/hacking_score': hacking_info['hacking_score'],
-                            'reward_hacking/confidence': hacking_info['confidence'],
-                            **{f'reward_hacking/{k}': v for k, v in hacking_info['indicators'].items()}
+                            'reward_hacking/hacking_score': hacking_info.get('hacking_score', 0.0),
+                            'reward_hacking/confidence': hacking_info.get('confidence', 0.0),
+                            **{f'reward_hacking/{k}': v for k, v in indicators.items()}
                         })
             
             self.current_episode += 1
@@ -703,7 +711,8 @@ class StateOfTheArtTrainer:
         
         # Get latest reward hacking score
         hacking_info = self.reward_hacking_detector.detect_hacking()
-        hacking_status = "[SAFE]" if hacking_info['hacking_score'] < 0.3 else "[CAUTION]" if hacking_info['hacking_score'] < 0.7 else "[DANGER]"
+        hacking_score = hacking_info.get('hacking_score', 0.0)
+        hacking_status = "[SAFE]" if hacking_score < 0.3 else "[CAUTION]" if hacking_score < 0.7 else "[DANGER]"
         
         self.logger.info(
             f"Episode {self.current_episode:>5}, Step {self.total_timesteps:>8,} | "
@@ -724,7 +733,7 @@ class StateOfTheArtTrainer:
                 'training/success_rate': recent_success,
                 'training/episode_length': recent_length,
                 'training/steps_per_second': steps_per_second,
-                'training/hacking_score': hacking_info['hacking_score'],
+                'training/hacking_score': hacking_info.get('hacking_score', 0.0),
                 'curriculum/stage': self.curriculum_manager.get_current_stage().name if self.curriculum_manager and self.curriculum_manager.get_current_stage() else 'none'
             }, step=self.total_timesteps)
     
@@ -776,8 +785,9 @@ class StateOfTheArtTrainer:
         
         # Reward hacking summary
         final_hacking_info = self.reward_hacking_detector.detect_hacking()
-        hacking_status = "[CLEAN]" if final_hacking_info['hacking_score'] < 0.3 else "[SUSPICIOUS]"
-        self.logger.info(f"Final Reward Hacking Status: {hacking_status} (Score: {final_hacking_info['hacking_score']:.3f})")
+        final_hacking_score = final_hacking_info.get('hacking_score', 0.0)
+        hacking_status = "[CLEAN]" if final_hacking_score < 0.3 else "[SUSPICIOUS]"
+        self.logger.info(f"Final Reward Hacking Status: {hacking_status} (Score: {final_hacking_score:.3f})")
         
         # Save metrics
         self.save_training_metrics()
