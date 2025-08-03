@@ -438,7 +438,12 @@ class EnhancedRocketTVCEnv(gym.Env):
             basePosition=[0, 0, 1.0],
             baseOrientation=[0, 0, 0, 1],
             baseInertialFramePosition=[0, 0, 0],
-            baseInertialFrameOrientation=[0, 0, 0, 1],
+            baseInertialFrameOrientation=[0, 0, 0, 1]
+        )
+        
+        # Set the inertia after creation
+        p.changeDynamics(
+            self.rocket_id, -1,
             localInertiaDiagonal=[I_xx, I_yy, I_zz]
         )
         
