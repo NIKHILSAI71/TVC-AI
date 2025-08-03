@@ -5,7 +5,7 @@
 globals:
   project_name: "TVC-AI-SOTA-2025"
   experiment_name: "rocket_tvc_sota_multi_algorithm"
-  output_dir: "./outputs/sota/${now:%Y-%m-%d}/${now:%H-%M-%S}"
+  output_dir: "./outputs/sota"
   seed: 42
   debug: false
   device: auto
