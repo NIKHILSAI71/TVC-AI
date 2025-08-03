@@ -14,17 +14,15 @@
 # limitations under the License.
 
 """
-SAC Training Script for Rocket TVC Control
+SAC Training Script for Rocket TVC Control - Optimized
 
 This script trains a Soft Actor-Critic agent to control rocket attitude using
 thrust vector control in a PyBullet-based simulation environment.
 
-Features:
-- Comprehensive logging and monitoring with TensorBoard
-- Hyperparameter configuration with Hydra
-- Model checkpointing and early stopping
-- Domain randomization for robust policy learning
-- Integration with Weights & Biases for experiment tracking
+Optimized for fast learning:
+- Essential logging with TensorBoard only
+- Streamlined configuration
+- Focused on core SAC training
 """
 
 import os
@@ -38,9 +36,16 @@ import numpy as np
 import torch
 import hydra
 from omegaconf import DictConfig, OmegaConf
-import wandb
 from tensorboardX import SummaryWriter
 from tqdm import tqdm
+
+# Optional wandb import with graceful fallback
+try:
+    import wandb
+    WANDB_AVAILABLE = True
+except ImportError:
+    WANDB_AVAILABLE = False
+    print("Warning: wandb not available, continuing without it...")
 
 # Add project root to Python path
 project_root = Path(__file__).parent.parent
@@ -187,7 +192,7 @@ def evaluate_agent(agent: SACAgent, eval_env, num_episodes: int = 10,
     return eval_metrics
 
 
-@hydra.main(version_base=None, config_path="../config", config_name="train")
+@hydra.main(version_base=None, config_path="../config", config_name="minimal")
 def train_agent(cfg: DictConfig) -> None:
     """
     Main training function.
@@ -223,14 +228,46 @@ def train_agent(cfg: DictConfig) -> None:
     log_dir = output_dir / "logs"
     log_dir.mkdir(exist_ok=True)
     
-    # Initialize Weights & Biases if enabled
-    if cfg.wandb.enabled:
-        wandb.init(
-            project=cfg.wandb.project,
-            name=cfg.wandb.run_name,
-            config=OmegaConf.to_container(cfg, resolve=True),
-            tags=cfg.wandb.tags
-        )
+    # Initialize Weights & Biases if enabled and available
+    # Fix: Only initialize wandb if explicitly enabled AND API key is available
+    wandb_enabled = False
+    if cfg.wandb.get('enabled', False) and WANDB_AVAILABLE:
+        try:
+            # Only initialize if API key is explicitly available
+            if os.getenv('WANDB_API_KEY'):
+                wandb.init(
+                    project=cfg.wandb.project,
+                    name=cfg.wandb.run_name,
+                    config=OmegaConf.to_container(cfg, resolve=True),
+                    tags=cfg.wandb.tags,
+                    mode=cfg.wandb.get('mode', 'online')
+                )
+                wandb_enabled = True
+                logger.info("Wandb initialized successfully")
+            elif cfg.wandb.get('mode', 'online') == 'offline':
+                # Only allow offline mode if explicitly requested
+                wandb.init(
+                    project=cfg.wandb.project,
+                    name=cfg.wandb.run_name,
+                    config=OmegaConf.to_container(cfg, resolve=True),
+                    tags=cfg.wandb.tags,
+                    mode='offline'
+                )
+                wandb_enabled = True
+                logger.info("Wandb initialized in offline mode")
+            else:
+                logger.info("Wandb disabled: No API key found and offline mode not requested")
+        except Exception as e:
+            logger.warning(f"Failed to initialize wandb: {e}. Continuing without wandb...")
+            wandb_enabled = False
+    else:
+        if not WANDB_AVAILABLE:
+            logger.info("Wandb not available (package not installed)")
+        else:
+            logger.info("Wandb disabled in configuration")
+    
+    # Update config to reflect actual wandb status
+    cfg.wandb.enabled = wandb_enabled
     
     # Initialize TensorBoard logger
     tb_logger = TensorBoardLogger(str(log_dir))
@@ -319,7 +356,7 @@ def train_agent(cfg: DictConfig) -> None:
         angular_damping=cfg.get('angular_damping', 0.01)
     )
     
-    # Training environment with domain randomization
+    # Training environment
     train_env = RocketTVCEnv(
         config=rocket_config,
         max_episode_steps=cfg.env.max_episode_steps,
@@ -346,22 +383,23 @@ def train_agent(cfg: DictConfig) -> None:
     logger.info(f"Observation dimension: {obs_dim}")
     logger.info(f"Action dimension: {action_dim}")
     
-    # Create SAC agent with improved configuration
+    # Create SAC agent with configuration
     sac_config = SACConfig(
-        # Enhanced network architecture
-        hidden_dims=cfg.agent.get('hidden_dims', [512, 512, 256]),  # Larger networks
-        lr_actor=cfg.agent.get('lr_actor', 1e-4),      # More conservative
-        lr_critic=cfg.agent.get('lr_critic', 3e-4),    # Keep critic faster
-        lr_alpha=cfg.agent.get('lr_alpha', 3e-4),
-        gamma=cfg.agent.get('gamma', 0.995),           # Increased for longer horizon
-        tau=cfg.agent.get('tau', 0.01),               # Faster target updates
-        alpha=cfg.agent.get('alpha', 0.1),            # Reduced initial entropy
+        # Network architecture from config
+        hidden_dims=cfg.agent.get('hidden_dims', [256, 256]),
+        lr_actor=cfg.agent.get('lr_actor', 1e-3),
+        lr_critic=cfg.agent.get('lr_critic', 1e-3),
+        lr_alpha=cfg.agent.get('lr_alpha', 1e-3),
+        gamma=cfg.agent.get('gamma', 0.95),
+        tau=cfg.agent.get('tau', 0.01),
+        alpha=cfg.agent.get('alpha', 0.1),
         automatic_entropy_tuning=cfg.agent.get('automatic_entropy_tuning', True),
-        batch_size=cfg.agent.get('batch_size', 512),   # Larger batch size
-        buffer_size=cfg.agent.get('buffer_size', 2000000),  # Larger buffer
-        learning_starts=cfg.agent.get('learning_starts', 5000),  # More exploration
-        train_freq=cfg.agent.get('train_freq', 4),     # Train every 4 steps
-        gradient_steps=cfg.agent.get('gradient_steps', 4)  # Multiple gradient steps
+        batch_size=cfg.agent.get('batch_size', 256),
+        buffer_size=cfg.agent.get('buffer_size', 50000),
+        learning_starts=cfg.agent.get('learning_starts', 1000),
+        train_freq=cfg.agent.get('train_freq', 1),
+        gradient_steps=cfg.agent.get('gradient_steps', 1),
+        layer_norm=cfg.agent.get('layer_norm', True),
     )
     
     agent = SACAgent(obs_dim, action_dim, sac_config)
@@ -433,14 +471,17 @@ def train_agent(cfg: DictConfig) -> None:
             tb_logger.log_scalar("episode/final_tilt_deg", final_tilt, episode_count)
             tb_logger.log_scalar("episode/final_altitude", info.get('altitude', 0), episode_count)
             
-            if cfg.wandb.enabled:
-                wandb.log({
-                    "episode/reward": episode_reward,
-                    "episode/length": episode_length,
-                    "episode/success": float(success),
-                    "episode/final_tilt_deg": final_tilt,
-                    "step": step
-                })
+            if cfg.wandb.enabled and wandb_enabled:
+                try:
+                    wandb.log({
+                        "episode/reward": episode_reward,
+                        "episode/length": episode_length,
+                        "episode/success": float(success),
+                        "episode/final_tilt_deg": final_tilt,
+                        "step": step
+                    })
+                except Exception:
+                    pass  # Fail silently if wandb logging fails
             
             # Reset environment
             obs, _ = train_env.reset()
@@ -468,7 +509,7 @@ def train_agent(cfg: DictConfig) -> None:
             for key, value in eval_metrics.items():
                 tb_logger.log_scalar(f"eval/{key}", value, step)
             
-            if cfg.wandb.enabled:
+            if cfg.wandb.enabled and wandb_enabled:
                 wandb.log({f"eval/{k}": v for k, v in eval_metrics.items()})
             
             logger.info(f"Evaluation - Reward: {eval_metrics['eval_reward_mean']:.2f}, "
@@ -521,7 +562,7 @@ def train_agent(cfg: DictConfig) -> None:
     logger.info(f"Total episodes: {episode_count}")
     logger.info(f"Best evaluation reward: {best_eval_reward:.2f}")
     
-    if cfg.wandb.enabled:
+    if cfg.wandb.enabled and wandb_enabled:
         wandb.log({
             "final/total_time": total_time,
             "final/total_episodes": episode_count,
