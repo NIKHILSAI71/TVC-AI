@@ -1,0 +1,151 @@
+# =============================================================================
+# TVC-AI Production Training Configuration
+# Optimized for maximum performance and robustness
+# =============================================================================
+
+defaults:
+  - _self_
+
+# =============================================================================
+# GLOBAL SETTINGS
+# =============================================================================
+globals:
+  project_name: "TVC-AI-Production"
+  experiment_name: "rocket_tvc_production_best"
+  output_dir: "./outputs/production/${now:%Y-%m-%d}/${now:%H-%M-%S}"
+  seed: 42
+  debug: false
+  device: "auto"
+
+# =============================================================================
+# WEIGHTS & BIASES CONFIGURATION (OPTIONAL)
+# =============================================================================
+wandb:
+  enabled: false  # Set to true if you have API key
+  project: "tvc-ai-production"
+  run_name: "${globals.experiment_name}"
+  tags: ["sac", "rocket", "production", "best"]
+  mode: "online"
+
+# =============================================================================
+# TRAINING CONFIGURATION (OPTIMIZED FOR BEST PERFORMANCE)
+# =============================================================================
+training:
+  total_steps: 1000000     # Extended training for best performance
+  eval_freq: 10000         # Regular evaluation
+  eval_episodes: 25        # Comprehensive evaluation
+  final_eval_episodes: 100 # Thorough final evaluation
+  checkpoint_freq: 50000
+
+  # Patient early stopping for best results
+  early_stopping:
+    enabled: true
+    patience: 15
+    min_improvement: 0.01
+
+# =============================================================================
+# AGENT CONFIGURATION (OPTIMIZED FOR BEST PERFORMANCE)
+# =============================================================================
+agent:
+  # Large network for maximum capacity
+  hidden_dims: [512, 512, 256]
+  layer_norm: true
+  activation: "relu"
+
+  # Conservative learning rates for stability
+  lr_actor: 0.0003
+  lr_critic: 0.001
+  lr_alpha: 0.0003
+
+  # SAC hyperparameters optimized for performance
+  gamma: 0.99              # High discount for long-term planning
+  tau: 0.005              # Slow target updates for stability
+  alpha: 0.2
+  automatic_entropy_tuning: true
+
+  # Training parameters optimized for performance
+  batch_size: 512
+  buffer_size: 1000000    # Large buffer for diverse experience
+  learning_starts: 5000   # More exploration before training
+  train_freq: 4
+  gradient_steps: 4
+
+# =============================================================================
+# ENVIRONMENT CONFIGURATION (FULL COMPLEXITY)
+# =============================================================================
+env:
+  max_episode_steps: 1500
+  render_mode: null
+  
+  # Full randomization for robustness
+  domain_randomization: true
+  sensor_noise: true
+
+# =============================================================================
+# ROCKET PHYSICS (REALISTIC AND CHALLENGING)
+# =============================================================================
+# Realistic rocket parameters for production performance
+mass: 2.5
+length: 1.0
+radius: 0.05
+thrust_max: 50.0
+thrust_std: 2.0
+max_gimbal_angle: 25.0
+max_initial_tilt: 8.0    # Challenging initial conditions
+wind_force_max: 3.0      # Realistic wind disturbances
+
+# Advanced domain randomization
+mass_variation: 0.4
+thrust_variation: 0.3
+cg_offset_max: 0.08
+max_initial_angular_vel: 1.0
+
+# Comprehensive reward function
+attitude_penalty_gain: 15.0
+angular_velocity_penalty_gain: 0.3
+control_effort_penalty_gain: 0.03
+stability_bonus: 2.5
+saturation_threshold: 0.8
+saturation_penalty: 3.0
+efficiency_bonus: 1.0
+
+# Advanced termination conditions
+max_tilt_degrees: 45.0
+ground_termination_height: 0.1
+max_horizontal_distance: 50.0
+max_termination_altitude: 20.0
+
+# Termination penalties
+crash_penalty: -100.0
+tilt_penalty: -50.0
+altitude_penalty: -30.0
+
+# Advanced physics
+aerodynamic_damping_coefficient: 0.03
+wind_force_max: 3.0
+gyro_noise_std: 0.15
+quaternion_noise_std: 0.02
+
+# =============================================================================
+# LOGGING CONFIGURATION (COMPREHENSIVE)
+# =============================================================================
+logging:
+  log_level: "INFO"
+  console_log_interval: 20
+  metrics_window: 200
+  
+  # Full TensorBoard logging
+  tensorboard:
+    enabled: true
+    log_histograms: true   # Monitor weight distributions
+    log_scalars: true
+    log_images: true       # Save episode visualizations
+
+# =============================================================================
+# HYDRA CONFIGURATION
+# =============================================================================
+hydra:
+  run:
+    dir: ${globals.output_dir}
+  job:
+    name: tvc_ai_production_training
